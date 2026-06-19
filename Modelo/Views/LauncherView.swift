@@ -152,9 +152,11 @@ struct LauncherView: View {
 
     private var capabilityFilterRow: some View {
         HStack(spacing: 6) {
-            CapabilityFilterChip(label: "Free",   key: "free",
-                                 tint: Theme.green,
-                                 active: activeFilters.contains("free"))   { toggle("free") }
+            if selectedServer?.kind == .openRouter {
+                CapabilityFilterChip(label: "Free",   key: "free",
+                                     tint: Theme.green,
+                                     active: activeFilters.contains("free"))   { toggle("free") }
+            }
             CapabilityFilterChip(label: "Vision", key: "vision",
                                  tint: Theme.blue,
                                  active: activeFilters.contains("vision")) { toggle("vision") }
