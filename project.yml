@@ -9,7 +9,7 @@ settings:
     # Automatic signing lets Xcode pick the right identity per machine.
     CODE_SIGN_STYLE: Automatic
     CODE_SIGN_IDENTITY: "Apple Development"
-    DEVELOPMENT_TEAM: ""
+    DEVELOPMENT_TEAM: WXQ53X7LZ7
 targets:
   Modelo:
     type: application
