@@ -88,12 +88,6 @@ struct ContentView: View {
                 }
                 .help("Toggle inference console (⌘I)")
             }
-            ToolbarItem {
-                SettingsLink {
-                    Label("Settings", systemImage: "gearshape")
-                }
-                .help("Settings (⌘,)")
-            }
         }
         .task(id: onlineServerIDs) { selectDefaultEndpoint(); await refreshModels() }
         .onAppear { restoreRoute() }
