@@ -1,5 +1,7 @@
 # Modelo
 
+<img src="Modelo/Assets.xcassets/AppIcon.appiconset/icon_128x128.png" width="128" alt="Modelo icon">
+
 A native macOS client for running inference against local and cloud LLMs.
 
 Connects to **LM Studio** over your local network or Tailscale, and to any **OpenAI-compatible cloud API** (OpenRouter, Together, Mistral, etc.). Built with SwiftUI and SwiftData — no third-party dependencies.
