@@ -33,6 +33,7 @@ targets:
         LSMinimumSystemVersion: "$(MACOSX_DEPLOYMENT_TARGET)"
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
+        NSHumanReadableCopyright: "© 2025 Patrick Ruster"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.peregrine.modelodos
