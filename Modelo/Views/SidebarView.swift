@@ -18,6 +18,7 @@ struct SidebarView: View {
     @Binding var route: SidebarRoute?
     @Binding var endpointFilter: UUID?
     var renamingIDs: Set<PersistentIdentifier> = []
+    var onNewChat: () -> Void = { }
     var onRenameWithAI: (Conversation) -> Void = { _ in }
     @State private var searchText = ""
     /// Debounced mirror of `searchText` that the filter reads. Updated ~250ms
@@ -41,6 +42,9 @@ struct SidebarView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 header
+
+                newChatButton
+                    .padding(.bottom, 8)
 
                 VStack(spacing: 2) {
                     navRow("Models",   icon: "square.grid.2x2",           to: .launcher)
@@ -99,6 +103,30 @@ struct SidebarView: View {
         .help("Go to launcher")
         .padding(.horizontal, 6)
         .padding(.bottom, 24)
+    }
+
+    // MARK: - New chat
+
+    private var newChatButton: some View {
+        Button(action: onNewChat) {
+            HStack(spacing: 8) {
+                Image(systemName: "square.and.pencil")
+                    .font(.system(size: 12, weight: .medium))
+                Text("New Chat")
+                    .font(.system(size: 13, weight: .medium))
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(Theme.amber)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 9)
+            .frame(maxWidth: .infinity)
+            .background(Theme.amber.opacity(0.1),
+                        in: RoundedRectangle(cornerRadius: Theme.Radius.control))
+            .overlay(RoundedRectangle(cornerRadius: Theme.Radius.control)
+                .stroke(Theme.amber.opacity(0.25), lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .help("New chat (⌘N)")
     }
 
     // MARK: - Primary nav
