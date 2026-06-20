@@ -30,7 +30,7 @@ struct LMStudioModel: Identifiable, Decodable, Hashable {
     let loadedContextLength: Int?
     /// Publisher / organization, e.g. `"mlx-community"`, `"lmstudio-community"`.
     let publisher: String?
-    /// File size on disk in bytes, from the `size` field of `/api/v0/models`.
+    /// File size on disk in bytes, from the `size_bytes` field of `/api/v0/models`.
     let sizeBytes: Int?
     /// When true, LM Studio will not evict this model from RAM when another is loaded.
     var keepInRam: Bool?
@@ -49,7 +49,7 @@ struct LMStudioModel: Identifiable, Decodable, Hashable {
         case id, object, type, arch, quantization, state, publisher
         case maxContextLength = "max_context_length"
         case loadedContextLength = "loaded_context_length"
-        case sizeBytes = "size"
+        case sizeBytes = "size_bytes"
         case keepInRam = "keep_in_ram"
     }
 
@@ -168,6 +168,47 @@ struct LMStudioModel: Identifiable, Decodable, Hashable {
         }
         let mb = Double(bytes) / 1_048_576
         return String(format: mb >= 100 ? "%.0f MB" : "%.1f MB", mb)
+    }
+
+    /// Best-effort human-readable size: exact API value when available, otherwise
+    /// estimated from parameter count × quantization bit-depth (prefixed with `~`).
+    /// Returns nil when neither source provides enough information.
+    var displaySizeFormatted: String? {
+        if let exact = fileSizeFormatted { return exact }
+
+        // Parse parameter count from id (e.g. "30B" → 30 × 10⁹).
+        guard let paramStr = parameterSize else { return nil }
+        let upper = paramStr.uppercased()
+        let scale: Double
+        let digits: String
+        if upper.hasSuffix("B") {
+            scale = 1_000_000_000; digits = String(upper.dropLast())
+        } else if upper.hasSuffix("M") {
+            scale = 1_000_000; digits = String(upper.dropLast())
+        } else { return nil }
+        guard let paramCount = Double(digits), paramCount > 0 else { return nil }
+        let params = paramCount * scale
+
+        // Parse bit-depth from quantization. Handles "4bit", "Q4_K_M", "f16", etc.
+        let q = (quantization ?? "").lowercased()
+        let bits: Double
+        if      q.contains("2bit") || q.hasPrefix("q2") || q == "int2" { bits = 2 }
+        else if q.contains("3bit") || q.hasPrefix("q3")                { bits = 3 }
+        else if q.contains("4bit") || q.hasPrefix("q4") || q == "int4" { bits = 4 }
+        else if q.contains("5bit") || q.hasPrefix("q5")                { bits = 5 }
+        else if q.contains("6bit") || q.hasPrefix("q6")                { bits = 6 }
+        else if q.contains("8bit") || q.hasPrefix("q8") || q == "int8" { bits = 8 }
+        else if q.contains("f16") || q == "float16" || q == "fp16"     { bits = 16 }
+        else if q.contains("f32") || q == "float32" || q == "fp32"     { bits = 32 }
+        else { return nil }
+
+        // ~10% overhead for non-quantized layers, buffers, and metadata.
+        let bytes = params * bits / 8.0 * 1.10
+        let gb = bytes / 1_073_741_824
+        if gb >= 10 { return "~\(Int(gb.rounded())) GB" }
+        if gb >= 1  { return String(format: "~%.1f GB", gb) }
+        let mb = bytes / 1_048_576
+        return String(format: "~%.0f MB", mb)
     }
 
     /// Display arch — prefers API field, falls back to a rough id-derived guess.
