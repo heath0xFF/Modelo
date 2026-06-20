@@ -327,7 +327,7 @@ private struct ServerSettingsRow: View {
     let onDelete: () -> Void
     @FocusState private var focus: Field?
 
-    private enum Field { case label, host, port }
+    private enum Field { case label, host, port, agent }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -367,6 +367,21 @@ private struct ServerSettingsRow: View {
                 }
                 .fixedSize()
             }
+
+            FieldGroup(caption: "Agent URL") {
+                TextField("http://host:9099  ·  optional", text: Binding(
+                    get: { server.metricsAgentURL ?? "" },
+                    set: { server.metricsAgentURL = $0.isEmpty ? nil : $0 }
+                ))
+                .textFieldStyle(.plain)
+                .focused($focus, equals: .agent)
+                .fieldChrome(focused: focus == .agent)
+            }
+
+            Text("Optional — a modelo-tap GPU agent on this box. Streams VRAM/power/temp to the Status dashboard. See modelo-tap/README.md.")
+                .font(Theme.metric(10))
+                .foregroundStyle(Theme.textFaint)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(16)
         .panel(Theme.popoverBG)

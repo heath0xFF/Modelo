@@ -18,6 +18,9 @@ final class Server {
     var kindRaw: String = ServerKind.lmStudio.rawValue
     /// DEPRECATED: never used; secrets now live in Keychain (`KeychainStore`). Kept to avoid a migration.
     var apiKey: String?
+    /// For local servers: base URL of a `modelo-tap` GPU-metrics agent running on the box
+    /// (e.g. "http://spark:9099"). nil/empty disables GPU telemetry. Ignored for cloud APIs.
+    var metricsAgentURL: String?
 
     var kind: ServerKind {
         get { ServerKind(rawValue: kindRaw) ?? .lmStudio }
