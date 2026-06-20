@@ -217,7 +217,7 @@ struct SpecStrip: View {
         if let s = model.parameterSize   { p.append(s) }
         if let q = model.quantization    { p.append(q) }
         if let c = model.maxContextLength { p.append("\(c >= 1000 ? "\(c / 1000)K" : "\(c)") ctx") }
-        if let f = model.fileSizeFormatted { p.append(f) }
+        if let f = model.displaySizeFormatted { p.append(f) }
         return p
     }
 
