@@ -166,7 +166,7 @@ struct MenuBarChatView: View {
 
     private var composer: some View {
         HStack(alignment: .bottom, spacing: 8) {
-            TextField("Message… (⇧↩ to send)", text: $draft, axis: .vertical)
+            TextField("Message…", text: $draft, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(.system(size: 13))
                 .foregroundStyle(Theme.Palette.ink)
@@ -182,7 +182,10 @@ struct MenuBarChatView: View {
                         )
                 )
                 .onKeyPress(.return, phases: .down) { press in
-                    guard press.modifiers.contains(.shift) else { return .ignored }
+                    if press.modifiers.contains(.shift) {
+                        draft += "\n"
+                        return .handled
+                    }
                     if canSend { send() }
                     return .handled
                 }

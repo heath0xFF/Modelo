@@ -29,7 +29,11 @@ final class LMStudioClient: ChatProvider {
     /// Embedding models are filtered out.
     func fetchModels(endpoint: Endpoint) async throws -> [LMStudioModel] {
         switch endpoint.kind {
-        case .cloudAPI, .openRouter:
+        case .openRouter:
+            let data = try await authedGet(path: "/models", endpoint: endpoint)
+            return try OpenRouterCatalog.models(from: data)
+                .filter { !$0.isEmbeddingModel }
+        case .cloudAPI:
             let data = try await authedGet(path: "/models", endpoint: endpoint)
             return try JSONDecoder().decode(ModelsResponse.self, from: data).data
                 .filter { !$0.isEmbeddingModel }

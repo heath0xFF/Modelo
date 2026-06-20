@@ -49,7 +49,6 @@ struct ModelBrowserView: View {
             )) { item in
                 HStack {
                     Text(item.model.shortName)
-                    if item.model.isFree { Chip(text: "free", tint: Theme.Palette.live) }
                     CapabilityChips(model: item.model)
                     Spacer()
                 }

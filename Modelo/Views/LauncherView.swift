@@ -152,7 +152,7 @@ struct LauncherView: View {
 
     private var capabilityFilterRow: some View {
         HStack(spacing: 6) {
-            if selectedServer?.kind == .cloudAPI {
+            if selectedServer?.kind != .lmStudio {
                 CapabilityFilterChip(label: "Free",   key: "free",
                                      tint: Theme.green,
                                      active: activeFilters.contains("free"))   { toggle("free") }

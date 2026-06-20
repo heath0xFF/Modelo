@@ -154,6 +154,7 @@ struct CapabilityChips: View {
 
     var body: some View {
         HStack(spacing: 4) {
+            if model.isFree           { Chip(text: "free",   tint: Theme.Palette.live) }
             if model.supportsVision   { Chip(text: "vision", tint: Theme.Palette.vision) }
             if model.supportsToolUse  { Chip(text: "tools",  tint: Theme.Palette.signal) }
             if model.supportsThinking { Chip(text: "reason", tint: Theme.Palette.think) }
