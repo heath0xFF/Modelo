@@ -60,8 +60,14 @@ struct ModeloApp: App {
                 .environment(mcpManager)
                 .task { await startMonitoring() }
                 .task { mcpManager.startAll() }
+                .onAppear {
+                    DispatchQueue.main.async {
+                        NSApp.keyWindow?.center()
+                    }
+                }
         }
-        .defaultSize(width: 1100, height: 720)
+        .defaultSize(width: 1200, height: 740)
+        .defaultPosition(.center)
         .modelContainer(container)
         .commands {
             // File ▸ New Chat — replaces the default "New Window" item.
