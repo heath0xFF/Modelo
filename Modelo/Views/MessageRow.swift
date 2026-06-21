@@ -178,10 +178,12 @@ struct MessageRow: View {
                     .foregroundStyle(copied ? Theme.green : Theme.textDim)
             }
             .buttonStyle(.plain)
+            .help("Copy response")
             ShareLink(item: message.content) {
                 Text("Share").foregroundStyle(Theme.textDim)
             }
             .buttonStyle(.plain)
+            .help("Share")
         }
         .font(.mono(10))
         .monospacedDigit()
@@ -222,6 +224,7 @@ struct MessageRow: View {
         }
         .buttonStyle(.plain)
         .disabled(!enabled)
+        .help(symbol == "chevron.left" ? "Previous response" : "Next response")
     }
 
     // MARK: User hover row — actions + telemetry

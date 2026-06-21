@@ -190,6 +190,7 @@ struct LauncherView: View {
             .buttonStyle(.plain)
             .font(Theme.label(10))
             .foregroundStyle(Theme.amber)
+            .help("Clear all filters")
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -288,6 +289,7 @@ private struct PersonaTile: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
+        .help(isSelected ? "Deselect persona" : "Use \(persona.name) persona")
         .contextMenu {
             Button("Edit Persona") { showingEdit = true }
         }
@@ -524,5 +526,6 @@ private struct ModelTile: View {
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
         .disabled(isLoading)
+        .help("Start a chat with \(model.familyName)")
     }
 }

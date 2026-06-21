@@ -147,6 +147,7 @@ struct SidebarView: View {
                     in: RoundedRectangle(cornerRadius: Theme.Radius.control))
         .contentShape(Rectangle())
         .onTapGesture { route = dest }
+        .help("Go to \(title)")
     }
 
     // MARK: - Servers
@@ -213,6 +214,7 @@ struct SidebarView: View {
             endpointFilter = server.id
             route = nil
         }
+        .help("Filter models by \(server.label)")
     }
 
     private var onlineCount: Int {
@@ -315,6 +317,7 @@ struct SidebarView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .help(sectionExpanded(id) ? "Collapse section" : "Expand section")
         .padding(.horizontal, 8)
         .padding(.top, 14)
         .padding(.bottom, 6)
@@ -353,6 +356,7 @@ struct SidebarView: View {
                     in: RoundedRectangle(cornerRadius: 7))
         .contentShape(Rectangle())
         .onTapGesture { route = .conversation(convo.persistentModelID) }
+        .help("Open conversation")
     }
 
     private var searchField: some View {

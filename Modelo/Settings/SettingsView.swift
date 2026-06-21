@@ -160,6 +160,7 @@ struct SettingsView: View {
                    stroke: Theme.amber.opacity(0.3))
         }
         .buttonStyle(.plain)
+        .help(label)
     }
 
     private func addMCPServer() {
@@ -239,6 +240,7 @@ private struct PersonaSettingsRow: View {
             }
             .contentShape(Rectangle())
             .onTapGesture { withAnimation(.easeOut(duration: 0.18)) { isExpanded.toggle() } }
+            .help(isExpanded ? "Collapse persona" : "Edit persona")
 
             if isExpanded {
                 VStack(alignment: .leading, spacing: 14) {
@@ -360,6 +362,7 @@ private struct PresetsSettingsTab: View {
                         .foregroundStyle(Theme.amber)
                 }
                 .buttonStyle(.plain)
+                .help("Add a preset")
                 .padding(.top, 4)
 
                 Text("Apply a preset to a chat from the sliders button in its header.")
@@ -1086,6 +1089,7 @@ private struct CategoryChip: View {
                                                        : Theme.line, lineWidth: 1))
         }
         .buttonStyle(.plain)
+        .help("Filter by \(label)")
     }
 }
 
@@ -1130,6 +1134,7 @@ private struct CatalogEntryRow: View {
                 .panel(Theme.fillHi, radius: 8, stroke: Theme.amber.opacity(0.3))
             }
             .buttonStyle(.plain)
+            .help("Add \(entry.name)")
         }
         .padding(14)
         .panel(Theme.popoverBG)

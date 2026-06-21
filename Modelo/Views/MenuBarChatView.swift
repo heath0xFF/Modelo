@@ -117,6 +117,7 @@ struct MenuBarChatView: View {
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
+        .help("Pick a model")
     }
 
     // MARK: Message list
@@ -208,6 +209,7 @@ struct MenuBarChatView: View {
             }
             .buttonStyle(.plain)
             .disabled(!canSend && !isStreaming)
+            .help(isStreaming ? "Stop generating" : "Send message")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
