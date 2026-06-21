@@ -26,7 +26,8 @@ struct ChatView: View {
     /// Set when the user taps "edit & resend" on a past user turn; the next send
     /// forks a sibling branch under that message instead of extending the path.
     @State private var editingSource: Message?
-    @FocusState private var composerFocused: Bool
+    @State private var composerFocused: Bool = false
+    @State private var composerHeight: CGFloat = 22
     // Adjustable chat text size, shared with MessageRow and the View menu (⌘+ / ⌘-).
     @AppStorage("messageFontSize") private var messageFontSize: Double = 15
     // Global sampling defaults (JSON-encoded SamplingParams), edited in Settings ▸ Sampling.
@@ -349,18 +350,17 @@ struct ChatView: View {
                 if pickedModel?.model.supportsVision == true {
                     attachButton
                 }
-                TextField("Message…", text: $draft, axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: messageFontSize))
-                    .foregroundStyle(Theme.textHi)
-                    .lineLimit(1...8)
+                ComposerField(text: $draft, height: $composerHeight,
+                              isFocused: $composerFocused,
+                              placeholder: "Message…  (⇧⏎ for newline)",
+                              fontSize: messageFontSize,
+                              onSubmit: { if canSend { send() } })
+                    .frame(height: composerHeight)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 11)
                     .panel(Theme.fill,
                            radius: Theme.Radius.field,
                            stroke: composerFocused ? Theme.amber : Theme.line)
-                    .focused($composerFocused)
-                    .onSubmit(send)
 
                 // Live token estimate for the message being typed (§1.6).
                 if !draft.isEmpty {
