@@ -4,13 +4,16 @@ import AppKit
 /// The Claude-style artifact side panel (§2.4): renders the selected artifact group's
 /// latest version with a Preview⇄Source toggle, version navigation, and copy/download.
 struct ArtifactPanel: View {
-    let group: ArtifactGroup
+    let groups: [ArtifactGroup]
+    let selectedID: String
+    let onSelect: (String) -> Void
     let onClose: () -> Void
 
     @State private var versionIndex: Int = 0
     @State private var showingSource = false
     @State private var copied = false
 
+    private var group: ArtifactGroup { groups.first { $0.id == selectedID } ?? groups[0] }
     private var current: Artifact { group.versions[min(versionIndex, group.versions.count - 1)] }
     private var hasToggle: Bool { group.kind.isRenderable || group.kind == .markdown }
     private var previewLabel: String { group.kind.isRenderable ? "Preview" : "Rendered" }
@@ -28,6 +31,8 @@ struct ArtifactPanel: View {
         .onAppear { versionIndex = group.versions.count - 1 }
         // Follow the newest version when the model revises the artifact while it's open.
         .onChange(of: group.versions.count) { versionIndex = group.versions.count - 1 }
+        // Reset to the latest version + preview when switching artifacts via the picker.
+        .onChange(of: selectedID) { versionIndex = group.versions.count - 1; showingSource = false }
     }
 
     // MARK: Header
@@ -37,15 +42,7 @@ struct ArtifactPanel: View {
             Image(systemName: group.kind.icon)
                 .font(.system(size: 13))
                 .foregroundStyle(Theme.amber)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(group.title)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Theme.textHi)
-                    .lineLimit(1)
-                Text(group.kind.label + (group.language.map { " · \($0)" } ?? ""))
-                    .font(.mono(10))
-                    .foregroundStyle(Theme.textFaint)
-            }
+            if groups.count > 1 { picker } else { titleBlock }
             Spacer(minLength: 8)
             Button(action: onClose) {
                 Image(systemName: "xmark")
@@ -57,6 +54,39 @@ struct ArtifactPanel: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
+    }
+
+    private var titleBlock: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(group.title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Theme.textHi)
+                .lineLimit(1)
+            Text(group.kind.label + (group.language.map { " · \($0)" } ?? ""))
+                .font(.mono(10))
+                .foregroundStyle(Theme.textFaint)
+        }
+    }
+
+    /// Dropdown to switch between the conversation's artifacts (§2.4).
+    private var picker: some View {
+        Menu {
+            ForEach(groups) { g in
+                Button { onSelect(g.id) } label: {
+                    Label(g.title, systemImage: g.kind.icon)
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                titleBlock
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(Theme.textMute)
+            }
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("Switch artifact")
     }
 
     // MARK: Content

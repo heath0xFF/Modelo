@@ -126,13 +126,16 @@ struct ChatView: View {
 
             if let group = openArtifactGroup {
                 artifactResizeHandle
-                ArtifactPanel(group: group, onClose: { openArtifactID = nil })
+                ArtifactPanel(groups: artifactGroups,
+                              selectedID: group.id,
+                              onSelect: { openArtifactID = $0 },
+                              onClose: { openArtifactID = nil })
                     .frame(width: artifactPanelWidth)
-                    .id(group.id)
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
-        .animation(.easeOut(duration: 0.18), value: openArtifactID)
+        // Animate the panel sliding in/out, but not switches between artifacts.
+        .animation(.easeOut(duration: 0.18), value: openArtifactID == nil)
         .background(Theme.windowBG)
         .onAppear { ensureSession() }
         .onDisappear { cancelInFlight() }
