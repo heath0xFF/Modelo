@@ -116,7 +116,7 @@ enum ClientError: LocalizedError, Equatable {
     var errorDescription: String? {
         switch self {
         case .invalidURL:         "The server URL is invalid. Check the address in Settings."
-        case .unreachable:        "Could not reach LM Studio over Tailscale. Is it running?"
+        case .unreachable:        "Couldn't reach the server. Check the host and port, and that it's running."
         case .unsupported:        "This operation is only supported on LM Studio servers."
         case .serverError(let m): m
         }

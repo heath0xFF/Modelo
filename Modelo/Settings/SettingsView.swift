@@ -451,8 +451,12 @@ private struct ServerSettingsRow: View {
     @Bindable var server: Server
     let onDelete: () -> Void
     @FocusState private var focus: Field?
+    @State private var apiKey = ""
+    @State private var isKeyRevealed = false
+    private let keychain = KeychainStore()
+    private var keychainAccount: String { Endpoint.keychainAccount(for: server) }
 
-    private enum Field { case label, host, port, agent, prometheus }
+    private enum Field { case label, host, port, key, agent, prometheus }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -496,6 +500,29 @@ private struct ServerSettingsRow: View {
             // Live "is it working?" feedback — re-probes when host/port/runtime change.
             ServerProbeRow(server: server)
 
+            FieldGroup(caption: "API key (optional)") {
+                HStack(spacing: 0) {
+                    Group {
+                        if isKeyRevealed { TextField("only if the server requires one", text: $apiKey) }
+                        else { SecureField("only if the server requires one", text: $apiKey) }
+                    }
+                    .textFieldStyle(.plain)
+                    .focused($focus, equals: .key)
+                    Button { isKeyRevealed.toggle() } label: {
+                        Image(systemName: isKeyRevealed ? "eye.slash" : "eye")
+                            .font(.system(size: 10)).foregroundStyle(Theme.textLo).padding(.trailing, 4)
+                    }
+                    .buttonStyle(.plain)
+                    .help(isKeyRevealed ? "Hide key" : "Reveal key")
+                }
+                .fieldChrome(focused: focus == .key)
+            }
+
+            Text("Optional — a bearer token (Keychain) for a local server that requires auth, e.g. an MLX server. Leave blank for LM Studio / llama.cpp.")
+                .font(Theme.metric(10))
+                .foregroundStyle(Theme.textFaint)
+                .fixedSize(horizontal: false, vertical: true)
+
             FieldGroup(caption: "Agent URL") {
                 TextField("http://host:9099  ·  optional", text: Binding(
                     get: { server.metricsAgentURL ?? "" },
@@ -534,6 +561,10 @@ private struct ServerSettingsRow: View {
             if old == .host, new != .host {
                 server.host = Server.normalizedHost(server.host)
             }
+        }
+        .onAppear { apiKey = keychain.get(account: keychainAccount) ?? "" }
+        .onChange(of: apiKey) { _, newValue in
+            keychain.set(newValue.isEmpty ? nil : newValue, account: keychainAccount)
         }
     }
 

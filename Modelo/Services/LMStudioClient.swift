@@ -34,14 +34,14 @@ final class LMStudioClient: ChatProvider {
             return try JSONDecoder().decode(ModelsResponse.self, from: data).data
                 .filter { !$0.isEmbeddingModel }
         case .lmStudio:
-            if let rich = try? await fetch(path: "/api/v0/models", baseURL: endpoint.baseURL) {
+            if let rich = try? await fetch(path: "/api/v0/models", endpoint: endpoint) {
                 return rich.filter { !$0.isEmbeddingModel }
             }
-            return try await fetch(path: "/v1/models", baseURL: endpoint.baseURL)
+            return try await fetch(path: "/v1/models", endpoint: endpoint)
                 .filter { !$0.isEmbeddingModel }
         case .llamaSwap:
             // llama.cpp / llama-swap is OpenAI-compatible but has no /api/v0.
-            return try await fetch(path: "/v1/models", baseURL: endpoint.baseURL)
+            return try await fetch(path: "/v1/models", endpoint: endpoint)
                 .filter { !$0.isEmbeddingModel }
         }
     }
@@ -52,24 +52,25 @@ final class LMStudioClient: ChatProvider {
         var request = URLRequest(url: url)
         applyAuth(&request, endpoint: endpoint)
         let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            throw ClientError.unreachable
+        guard let http = response as? HTTPURLResponse else { throw ClientError.unreachable }
+        // A 401/403 means the server is up but wants (a different) API key — surface
+        // that distinctly so the user can add one, rather than "unreachable".
+        if http.statusCode == 401 || http.statusCode == 403 {
+            throw ClientError.serverError("This server requires an API key. Add one below.")
         }
+        guard (200..<300).contains(http.statusCode) else { throw ClientError.unreachable }
         return data
     }
 
-    /// Adds bearer auth for cloud API endpoints; no-op for LM Studio.
+    /// Adds bearer auth whenever the endpoint carries a key — cloud APIs always, and
+    /// local OpenAI-compatible servers (e.g. an MLX server) that require one.
     private func applyAuth(_ request: inout URLRequest, endpoint: Endpoint) {
-        guard endpoint.kind == .cloudAPI, let key = endpoint.apiKey else { return }
+        guard let key = endpoint.apiKey, !key.isEmpty else { return }
         request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
     }
 
-    private func fetch(path: String, baseURL: String) async throws -> [LMStudioModel] {
-        guard let url = URL(string: "\(baseURL)\(path)") else { throw ClientError.invalidURL }
-        let (data, response) = try await session.data(from: url)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            throw ClientError.unreachable
-        }
+    private func fetch(path: String, endpoint: Endpoint) async throws -> [LMStudioModel] {
+        let data = try await authedGet(path: path, endpoint: endpoint)
         return try JSONDecoder().decode(ModelsResponse.self, from: data).data
     }
 
