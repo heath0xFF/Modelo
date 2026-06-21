@@ -40,6 +40,14 @@ struct ChatView: View {
     /// Draggable artifact-panel width (persisted); `dragStartWidth` anchors a live drag.
     @AppStorage("artifactPanelWidth") private var artifactPanelWidth: Double = 460
     @State private var dragStartWidth: Double?
+    /// Console inspector state (shared with ContentView). Auto-collapsed while an
+    /// artifact is open so the two right-side panels don't crowd each other out.
+    @AppStorage("consoleInspectorOpen") private var consoleOpen = false
+    @State private var consoleWasOpen = false
+    /// Live width of the chat detail area, so the artifact panel can't shrink the chat
+    /// below `minChatWidth`. Seeded wide to avoid a first-layout squeeze.
+    @State private var detailWidth: CGFloat = 1200
+    private let minChatWidth: Double = 360
     // Whether to teach the model the artifact syntax (opt-out in Settings ▸ Tools).
     @AppStorage("artifactsEnabled") private var artifactsEnabled = true
     // Adjustable chat text size, shared with MessageRow and the View menu (⌘+ / ⌘-).
@@ -115,31 +123,52 @@ struct ChatView: View {
         openArtifactID.flatMap { id in artifactGroups.first { $0.id == id } }
     }
 
-    var body: some View {
-        HStack(spacing: 0) {
-            VStack(spacing: 0) {
-                header
-                messageStream
-                footer
-            }
-            .frame(maxWidth: .infinity)
+    /// Artifact panel width clamped so the chat never shrinks below `minChatWidth`.
+    private var clampedArtifactWidth: Double {
+        min(max(artifactPanelWidth, 320), max(360, Double(detailWidth) - minChatWidth))
+    }
 
-            if let group = openArtifactGroup {
-                artifactResizeHandle
-                ArtifactPanel(groups: artifactGroups,
-                              selectedID: group.id,
-                              onSelect: { openArtifactID = $0 },
-                              onClose: { openArtifactID = nil })
-                    .frame(width: artifactPanelWidth)
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
+    var body: some View {
+        GeometryReader { geo in
+            HStack(spacing: 0) {
+                VStack(spacing: 0) {
+                    header
+                    messageStream
+                    footer
+                }
+                .frame(maxWidth: .infinity)
+
+                if let group = openArtifactGroup {
+                    artifactResizeHandle
+                    ArtifactPanel(groups: artifactGroups,
+                                  selectedID: group.id,
+                                  onSelect: { openArtifactID = $0 },
+                                  onClose: { openArtifactID = nil })
+                        .frame(width: clampedArtifactWidth)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                }
             }
+            .onAppear { detailWidth = geo.size.width }
+            .onChange(of: geo.size.width) { _, w in detailWidth = w }
         }
         // Animate the panel sliding in/out, but not switches between artifacts.
         .animation(.easeOut(duration: 0.18), value: openArtifactID == nil)
         .background(Theme.windowBG)
         .onAppear { ensureSession() }
         .onDisappear { cancelInFlight() }
-        .onChange(of: openArtifactID) { _, id in if let id { lastArtifactID = id } }
+        .onChange(of: openArtifactID) { old, new in
+            if let new { lastArtifactID = new }
+            withAnimation(.easeOut(duration: 0.2)) {
+                if old == nil, new != nil {
+                    // Opening: tuck the console away so both panels aren't crammed.
+                    if consoleOpen { consoleWasOpen = true; consoleOpen = false }
+                } else if old != nil, new == nil {
+                    // Closing: restore the console if we collapsed it.
+                    if consoleWasOpen { consoleOpen = true }
+                    consoleWasOpen = false
+                }
+            }
+        }
         // Auto-open the newest artifact when the model produces a new one (Claude-style).
         .onChange(of: artifactGroups.count) { _, count in
             if count > 0, let newest = artifactGroups.last { openArtifactID = newest.id }
@@ -218,7 +247,9 @@ struct ChatView: View {
                             .onChanged { value in
                                 let base = dragStartWidth ?? artifactPanelWidth
                                 dragStartWidth = base
-                                artifactPanelWidth = min(max(base - value.translation.width, 320), 900)
+                                // Cap so the chat keeps at least minChatWidth in view.
+                                let maxW = max(360, Double(detailWidth) - minChatWidth)
+                                artifactPanelWidth = min(max(base - value.translation.width, 320), maxW)
                             }
                             .onEnded { _ in dragStartWidth = nil }
                     )
