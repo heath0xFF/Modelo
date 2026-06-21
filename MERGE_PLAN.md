@@ -34,7 +34,10 @@ Completed item status: ✅ done · 🔶 in progress / in review · ⬜ not start
   `ChatSession.regenerate` forks an assistant sibling under the same user parent and streams
   into it; "Regenerate" footer action + `◀ k/n ▶` now lights up on assistant turns (PR #7,
   stacked on #6). Builds green, 79 tests pass; pending merge.
-- ⬜ Everything else below.
+- 🔶 **§1.6 Live token counting + context bar** — `TokenEstimator` (chars/4 heuristic);
+  composer `~N tok` readout + `ContextBar` fed a live projection (last-turn total / path
+  estimate + draft) (PR #8, stacked on #7). Builds green, 82 tests pass; pending merge.
+- ⬜ §1.4 sampling/presets, §1.5 compaction, and Phase 2+ below.
 
 > Sequencing note: §2.1's Swift side required a local-vs-cloud distinction, so the
 > llama.cpp/llama-swap runtime (originally implied by §2.2–2.3) was pulled forward.
@@ -293,7 +296,13 @@ var compactPrompt: String?        // custom summarization template
 
 ---
 
-### 1.6 Live token counting + context bar 🟡
+### 1.6 Live token counting + context bar 🟡 — 🔶 IN REVIEW (PR #8, stacked on #7)
+
+> Status: shipped the v1 heuristic. `TokenEstimator` (chars/4, `estimate(String)` +
+> `estimate([Message])`) drives a `~N tok` readout beside the composer and feeds the existing
+> `ContextBar` a live projection — `contextTokensUsed` (or an active-path estimate) + draft — so
+> the gauge fills as you type and ambers toward the window. v2 BPE tokenizer still a future
+> upgrade; image-attachment tokens not counted. Builds green; 82 tests pass.
 
 **Goal.** Live token estimate in the composer as you type, plus a context-usage bar that fills
 and turns amber at 80%. Modelo shows post-hoc `tokenCount` per message but nothing live.
