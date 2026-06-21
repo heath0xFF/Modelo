@@ -21,6 +21,9 @@ final class Server {
     /// For local servers: base URL of a `modelo-tap` GPU-metrics agent running on the box
     /// (e.g. "http://spark:9099"). nil/empty disables GPU telemetry. Ignored for cloud APIs.
     var metricsAgentURL: String?
+    /// For local servers: a backend's Prometheus `/metrics` endpoint (vLLM / llama.cpp /
+    /// llama-swap), e.g. "http://spark:8000/metrics". nil/empty disables the scrape (§2.3).
+    var prometheusURL: String?
 
     var kind: ServerKind {
         get { ServerKind(rawValue: kindRaw) ?? .lmStudio }

@@ -8,6 +8,7 @@ struct ModeloApp: App {
     @State private var reachabilityMonitor: ReachabilityMonitor
     @State private var serverMonitor = ServerMonitor()
     @State private var gpuMonitor = GPUMonitor()
+    @State private var prometheusMonitor = PrometheusMonitor()
     @State private var mcpManager = MCPServerManager()
     // Drives chat text size; matches the @AppStorage default used in the views.
     @AppStorage("messageFontSize") private var messageFontSize: Double = 15
@@ -48,6 +49,7 @@ struct ModeloApp: App {
                 .environment(registry)
                 .environment(serverMonitor)
                 .environment(gpuMonitor)
+                .environment(prometheusMonitor)
                 .environment(mcpManager)
                 .task { await startMonitoring() }
                 .task { mcpManager.startAll() }
@@ -108,6 +110,7 @@ struct ModeloApp: App {
         reachabilityMonitor.start(servers: servers)
         serverMonitor.start(servers: servers, registry: registry)
         gpuMonitor.start(servers: servers)
+        prometheusMonitor.start(servers: servers)
     }
 
     // Template image lets macOS tint it automatically for light/dark menu bar.

@@ -449,7 +449,7 @@ private struct ServerSettingsRow: View {
     let onDelete: () -> Void
     @FocusState private var focus: Field?
 
-    private enum Field { case label, host, port, agent }
+    private enum Field { case label, host, port, agent, prometheus }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -501,6 +501,21 @@ private struct ServerSettingsRow: View {
             }
 
             Text("Optional — a modelo-tap GPU agent on this box. Streams VRAM/power/temp to the Status dashboard. See modelo-tap/README.md.")
+                .font(Theme.metric(10))
+                .foregroundStyle(Theme.textFaint)
+                .fixedSize(horizontal: false, vertical: true)
+
+            FieldGroup(caption: "Prometheus URL") {
+                TextField("http://host:8000/metrics  ·  optional", text: Binding(
+                    get: { server.prometheusURL ?? "" },
+                    set: { server.prometheusURL = $0.isEmpty ? nil : $0 }
+                ))
+                .textFieldStyle(.plain)
+                .focused($focus, equals: .prometheus)
+                .fieldChrome(focused: focus == .prometheus)
+            }
+
+            Text("Optional — a backend's Prometheus /metrics (vLLM, llama.cpp, llama-swap). Shows running/queued requests and KV-cache use on the Status dashboard.")
                 .font(Theme.metric(10))
                 .foregroundStyle(Theme.textFaint)
                 .fixedSize(horizontal: false, vertical: true)
