@@ -46,11 +46,22 @@ final class Conversation {
     var isPinned: Bool = false
 
     /// This conversation's sampling overrides as a `SamplingParams` (§1.4) — nil
-    /// fields inherit the global default when resolved via `overlaying(_:)`.
+    /// fields inherit the global default when resolved via `overlaying(_:)`. Settable
+    /// so the per-conversation editor and "apply preset" can write all fields at once.
     var samplingOverride: SamplingParams {
-        SamplingParams(temperature: temperature, topP: topP, maxTokens: maxTokens,
-                       frequencyPenalty: frequencyPenalty, presencePenalty: presencePenalty,
-                       stop: stopSequences)
+        get {
+            SamplingParams(temperature: temperature, topP: topP, maxTokens: maxTokens,
+                           frequencyPenalty: frequencyPenalty, presencePenalty: presencePenalty,
+                           stop: stopSequences)
+        }
+        set {
+            temperature = newValue.temperature
+            topP = newValue.topP
+            maxTokens = newValue.maxTokens
+            frequencyPenalty = newValue.frequencyPenalty
+            presencePenalty = newValue.presencePenalty
+            stopSequences = newValue.stop
+        }
     }
 
     /// Sidebar label. Once the first turn finishes, `ChatSession` fills `title` in
