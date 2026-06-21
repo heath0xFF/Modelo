@@ -22,6 +22,9 @@ Completed item status: ✅ done · 🔶 in progress / in review · ⬜ not start
 - 🔶 **§2.1 Remote GPU telemetry via `modelo-tap`** — agent (PR #3) + Swift consumer
   (`Server.metricsAgentURL`, `GPUMonitor`, `GPUSnapshot`, Status tiles, Settings Agent URL)
   (PR #4). Builds green, 25 tests pass; pending merge + live verification on an NVIDIA box.
+- 🔶 **§1.1 Markdown rendering + code highlighting** — `MarkdownText` (MarkdownUI 2.4.1),
+  Highlightr-backed code blocks with per-block copy, streaming gate in `MessageRow`/`ChatView`
+  (PR #5). First third-party deps. Builds green, 70 tests pass; pending merge.
 - ⬜ Everything else below.
 
 > Sequencing note: §2.1's Swift side required a local-vs-cloud distinction, so the
@@ -75,7 +78,15 @@ Modelo/                      # this repo becomes a small monorepo
 Order matters: the **branching schema change (1.2)** reshapes `Message`, and 1.1/1.3 build on
 it. Land these before the data model ossifies further.
 
-### 1.1 Markdown rendering + code syntax highlighting 🟡
+### 1.1 Markdown rendering + code syntax highlighting 🟡 — 🔶 IN REVIEW (PR #5)
+
+> Status: `Modelo/Views/MarkdownText.swift` wraps `Markdown(content)` in a Modelo-themed
+> `MarkdownUI.Theme` (amber inline-code/links, `Theme.textMid` body); fenced blocks render on
+> `Theme.consoleBG` with a language label + per-block copy, syntax-highlighted via a shared
+> Highlightr (`atom-one-dark`). `MessageRow` swaps `Text`→`MarkdownText` gated by an
+> `isLiveStreaming` flag set in `ChatView` (plain text while streaming, Markdown on completion).
+> User bubbles stay plain for now. First third-party deps (MarkdownUI 2.4.1, Highlightr 2.3.0).
+> Builds green; 70 tests pass. Remaining: merge.
 
 **Goal.** Replace plain-text message bodies with Markdown (GFM) + syntax-highlighted code blocks.
 This is Modelo's single most visible gap — today everything is `Text(message.content)`.
