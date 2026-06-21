@@ -63,6 +63,11 @@ final class Conversation {
 
     /// The currently-selected path, root→leaf. Falls back to `createdAt` order for
     /// conversations that predate branching (no tree links yet).
+    ///
+    /// `ordered.last` fallback: a just-inserted leaf's temporary `persistentModelID`
+    /// stops resolving after `save()`, so `activeLeaf` reads `nil` until re-encoded —
+    /// harmless, since that leaf is also the newest by `createdAt`. Navigation (where
+    /// the exact leaf matters) always sets `activeLeaf` from a saved, permanent-id row.
     func activePath() -> [Message] {
         let ordered = messages.sorted { $0.createdAt < $1.createdAt }
         let hasTree = messages.contains { $0.parent != nil }
@@ -76,11 +81,19 @@ final class Conversation {
         return chain.reversed()
     }
 
+    /// Next branch index under `siblings` — one past the highest in use. Monotonic
+    /// (rather than `count`) so indices never collide with a survivor after a sibling
+    /// is dropped.
+    private func nextBranchIndex(among siblings: [Message]) -> Int {
+        (siblings.map(\.branchIndex).max() ?? -1) + 1
+    }
+
     /// Links `message` after the current active leaf and advances the leaf to it —
     /// the normal linear append used while sending.
     func appendToPath(_ message: Message) {
         let leaf = activePath().last
-        message.branchIndex = leaf?.children.count ?? messages.filter { $0.parent == nil }.count
+        let siblings = leaf?.children ?? messages.filter { $0.parent == nil }
+        message.branchIndex = nextBranchIndex(among: siblings)
         message.parent = leaf
         messages.append(message)
         activeLeaf = message
@@ -89,16 +102,19 @@ final class Conversation {
     /// Creates `message` as a new sibling of `existing` (same parent) and makes it
     /// the active leaf — the branch forked when a user turn is edited & resent.
     func branch(_ message: Message, asSiblingOf existing: Message) {
-        message.branchIndex = existing.siblings.count
+        message.branchIndex = nextBranchIndex(among: existing.siblings)
         message.parent = existing.parent
         messages.append(message)
         activeLeaf = message
     }
 
     /// Removes a leaf `message` (e.g. an empty assistant bubble after a cancel) and
-    /// moves the active leaf back to its parent.
+    /// moves the active leaf back to its parent. Detaches `message.parent` too, so the
+    /// dropped node doesn't linger in `parent.children` as a phantom branch; the caller
+    /// is responsible for deleting it from the context.
     func dropLeaf(_ message: Message) {
         let parent = message.parent
+        message.parent = nil
         messages.removeAll { $0 === message }
         activeLeaf = parent
     }

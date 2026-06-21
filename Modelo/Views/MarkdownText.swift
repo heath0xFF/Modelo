@@ -108,17 +108,17 @@ private struct ModeloCodeBlock: View {
 /// Bridges Highlightr (highlight.js, 180+ languages) into MarkdownUI. Highlightr
 /// spins up a JS context, so a single instance is shared across all code blocks.
 struct ModeloSyntaxHighlighter: CodeSyntaxHighlighter {
-    /// Built once — fenced blocks render at a fixed mono size independent of the
+    /// Built once. Fenced blocks render at a fixed 13pt mono, independent of the
     /// prose font, matching `Theme.code` usage elsewhere.
-    static let shared = ModeloSyntaxHighlighter(fontSize: 13)
+    static let shared = ModeloSyntaxHighlighter()
 
     private let highlightr: Highlightr?
 
-    init(fontSize: CGFloat) {
+    init() {
         let hl = Highlightr()
         // "atom-one-dark" sits well on `Theme.consoleBG`.
         hl?.setTheme(to: "atom-one-dark")
-        hl?.theme.setCodeFont(.monospacedSystemFont(ofSize: fontSize, weight: .regular))
+        hl?.theme.setCodeFont(.monospacedSystemFont(ofSize: 13, weight: .regular))
         highlightr = hl
     }
 

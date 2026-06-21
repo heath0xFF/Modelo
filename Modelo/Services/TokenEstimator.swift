@@ -8,10 +8,10 @@ import Foundation
 /// `swift-transformers`) is a future upgrade; see MERGE_PLAN §1.6 v2. Image
 /// attachments aren't counted (their cost isn't derivable from text).
 enum TokenEstimator {
-    /// Approximate token count for a single string (0 for empty).
+    /// Approximate token count for a single string: ~4 chars/token, rounded up
+    /// (0 for empty).
     static func estimate(_ text: String) -> Int {
-        guard !text.isEmpty else { return 0 }
-        return max(1, Int((Double(text.count) / 4.0).rounded(.up)))
+        (text.count + 3) / 4
     }
 
     /// Approximate token count across a sequence of messages (sum of bodies).

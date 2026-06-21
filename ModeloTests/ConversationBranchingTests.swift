@@ -113,6 +113,36 @@ final class ConversationBranchingTests: XCTestCase {
         XCTAssertEqual(convo.messages.count, 1)
         XCTAssertTrue(convo.activeLeaf === u)
         XCTAssertEqual(convo.activePath().map(\.content), ["u"])
+        // The dropped node must not linger as a phantom child of its old parent.
+        XCTAssertTrue(u.children.isEmpty)
+        XCTAssertNil(a.parent)
+    }
+
+    /// After a sibling is dropped, a new branch must not reuse a `branchIndex` still
+    /// held by a survivor (which would make sibling order / subtreeLeaf ambiguous).
+    func test_branchIndex_isMonotonicAcrossDrops() throws {
+        let ctx = try makeContext()
+        let convo = Conversation(modelID: "m", serverID: nil)
+        ctx.insert(convo)
+        let u = msg(.user, "u", 1)
+        let a0 = msg(.assistant, "a0", 2)
+        convo.appendToPath(u)
+        convo.appendToPath(a0)          // child of u, branchIndex 0
+        let a1 = msg(.assistant, "a1", 3)
+        convo.branch(a1, asSiblingOf: a0)   // branchIndex 1
+        try ctx.save()
+        XCTAssertEqual(a0.branchIndex, 0)
+        XCTAssertEqual(a1.branchIndex, 1)
+
+        // Drop the lower-indexed sibling, then fork another.
+        convo.dropLeaf(a0)
+        let a2 = msg(.assistant, "a2", 4)
+        convo.branch(a2, asSiblingOf: a1)
+        try ctx.save()
+
+        XCTAssertEqual(a2.branchIndex, 2)               // max(1) + 1, not count (= 1)
+        XCTAssertNotEqual(a1.branchIndex, a2.branchIndex)
+        XCTAssertEqual(a1.siblings.map(\.branchIndex), [1, 2])
     }
 
     // MARK: Migration
