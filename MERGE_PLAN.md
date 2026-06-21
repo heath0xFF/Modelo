@@ -15,13 +15,15 @@ Completed item status: ✅ done · 🔶 in progress / in review · ⬜ not start
 
 - ✅ **Phase 0 groundwork** — `MERGE_PLAN.md` / `AGENTS.md` / `CLAUDE.md` added; `upstream`
   remote (`prasta1/Modelo`) wired; collaboration model agreed (PR #2 fork / PR #8 upstream).
-- 🔶 **`modelo-tap` agent vendored + renamed** (ex `fornax-agent`) — builds, runs (PR #3).
+- ✅ **`modelo-tap` agent vendored + renamed** (ex `fornax-agent`) — builds, runs (PR #3).
+  Merged to fork `main`.
 - ✅ **Local server runtimes** — `ServerKind.llamaSwap` added (LM Studio + llama.cpp/llama-swap
   are local; cloud stays cloud). Groundwork for §2.1 gating and §2.3 (PR #4). vLLM/sglang
   are future enum cases.
-- 🔶 **§2.1 Remote GPU telemetry via `modelo-tap`** — agent (PR #3) + Swift consumer
+- ✅ **§2.1 Remote GPU telemetry via `modelo-tap`** — agent (PR #3) + Swift consumer
   (`Server.metricsAgentURL`, `GPUMonitor`, `GPUSnapshot`, Status tiles, Settings Agent URL)
-  (PR #4). Builds green, 25 tests pass; pending merge + live verification on an NVIDIA box.
+  (PR #4) + ponytail trim of the speculative util-history buffer. Merged to fork `main`.
+  Live verification on an NVIDIA box and Console GPU charts still pending.
 - ✅ **§1.1 Markdown rendering + code highlighting** — `MarkdownText` (MarkdownUI 2.4.1),
   Highlightr-backed code blocks with per-block copy, streaming gate in `MessageRow`/`ChatView`
   (PR #5). First third-party deps. Merged to fork `main`.
