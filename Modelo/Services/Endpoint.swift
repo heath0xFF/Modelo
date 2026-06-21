@@ -43,15 +43,15 @@ struct Endpoint: Sendable, Equatable {
 }
 
 extension Endpoint {
-    /// Keychain account key for a cloud API server's bearer token.
+    /// Keychain account key for a server's bearer token (cloud APIs, or a local
+    /// OpenAI-compatible server that requires auth, e.g. an MLX server).
     static func keychainAccount(for server: Server) -> String { "openrouter:\(server.id)" }
 
-    /// Reads the server's properties + (for cloud endpoints) its Keychain key. Not actor-isolated:
-    /// it does only synchronous reads, matching how the reachability probe already touches `Server`.
+    /// Reads the server's properties + any Keychain bearer token. A token is optional
+    /// for local servers (most need none) and sent only when present. Not actor-isolated:
+    /// it does only synchronous reads, matching how the reachability probe touches `Server`.
     init(server: Server, keychain: KeychainStore) {
-        let key = server.kind == .cloudAPI
-            ? keychain.get(account: Endpoint.keychainAccount(for: server))
-            : nil
-        self.init(baseURL: server.baseURL, kind: server.kind, apiKey: key)
+        let key = keychain.get(account: Endpoint.keychainAccount(for: server))
+        self.init(baseURL: server.baseURL, kind: server.kind, apiKey: key?.isEmpty == false ? key : nil)
     }
 }

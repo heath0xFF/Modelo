@@ -110,13 +110,16 @@ struct WireToolCall: Encodable, Equatable {
 enum ClientError: LocalizedError, Equatable {
     case invalidURL
     case unreachable
+    /// The server is up but rejected the request for lack of (valid) auth (401/403).
+    case authRequired
     case unsupported
     case serverError(String)
 
     var errorDescription: String? {
         switch self {
         case .invalidURL:         "The server URL is invalid. Check the address in Settings."
-        case .unreachable:        "Could not reach LM Studio over Tailscale. Is it running?"
+        case .unreachable:        "Couldn't reach the server. Check the host and port, and that it's running."
+        case .authRequired:       "This server requires an API key."
         case .unsupported:        "This operation is only supported on LM Studio servers."
         case .serverError(let m): m
         }

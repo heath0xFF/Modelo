@@ -43,6 +43,7 @@ struct ModelPickerView: View {
         }
         .buttonStyle(.plain)
         .fixedSize()
+        .help("Switch model")
         .onHover { hovering = $0 }
         .popover(isPresented: $showingPopover, arrowEdge: .bottom) {
             ModelPickerList(groups: groups,
@@ -146,6 +147,7 @@ private struct ModelPickerList: View {
                         .foregroundStyle(Theme.textDim)
                 }
                 .buttonStyle(.plain)
+                .help("Clear search")
             }
         }
         .padding(.horizontal, 12).frame(height: 34)
@@ -242,6 +244,7 @@ private struct ModelPickerList: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .help("Manage models in Settings")
         .padding(.horizontal, 14).padding(.vertical, 10)
         .background(Color.white.opacity(0.012))
     }
@@ -326,6 +329,7 @@ private struct ModelRow: View {
                             .background(Theme.amberFill, in: RoundedRectangle(cornerRadius: 6))
                     }
                     .buttonStyle(.plain)
+                    .help("Load this model")
                 }
             }
         }
@@ -334,6 +338,7 @@ private struct ModelRow: View {
         .contentShape(Rectangle())
         .onTapGesture { if !busy { onSelect() } }
         .onHover { hovering = $0 }
+        .help("Select \(model.familyName)")
     }
 
     @ViewBuilder private var indicator: some View {

@@ -20,6 +20,7 @@ struct BenchmarkView: View {
                 Spacer()
                 Button("Done") { dismiss() }
                     .buttonStyle(.plain).font(Theme.metric(11)).foregroundStyle(Theme.textDim)
+                    .help("Close")
             }
 
             stepperRow("Requests", value: $requests, range: 1...256, step: requests < 16 ? 1 : 8)
@@ -58,6 +59,7 @@ struct BenchmarkView: View {
                             in: RoundedRectangle(cornerRadius: Theme.Radius.control))
         }
         .buttonStyle(.plain)
+        .help(runner.isRunning ? "Stop the benchmark" : "Run the load test")
     }
 
     private func reportView(_ r: BenchmarkReport) -> some View {
@@ -85,6 +87,7 @@ struct BenchmarkView: View {
             Spacer()
             Text("\(value.wrappedValue)").font(.mono(12)).monospacedDigit().foregroundStyle(Theme.textHi)
             Stepper("", value: value, in: range, step: step).labelsHidden()
+                .help("Adjust \(label.lowercased())")
         }
     }
 }

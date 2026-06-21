@@ -81,6 +81,7 @@ struct ChatView: View {
                 if pickedModel?.model.supportsToolUse == true {
                     Toggle("Tools", isOn: $conversation.toolsEnabled)
                         .toggleStyle(ChipToggleStyle())
+                        .help("Allow this model to call tools")
                 }
                 Spacer(minLength: 8)
                 if let server = pickedModel?.server {
@@ -150,11 +151,13 @@ struct ChatView: View {
                         }
                         .font(Theme.metric(11))
                         .fixedSize()
+                        .help("Apply a saved preset to this chat")
                     }
                     Button("Reset") { conversation.samplingOverride = SamplingParams(); try? context.save() }
                         .font(Theme.metric(11))
                         .buttonStyle(.plain)
                         .foregroundStyle(Theme.textDim)
+                        .help("Reset to global defaults")
                 }
                 SamplingControls(params: Binding(get: { conversation.samplingOverride },
                                                  set: { conversation.samplingOverride = $0 }))
@@ -387,6 +390,7 @@ struct ChatView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(!canSend && !isStreaming)
+                .help(isStreaming ? "Stop generating" : "Send message")
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
@@ -427,6 +431,7 @@ struct ChatView: View {
                                 .foregroundStyle(Color.white, Color.black.opacity(0.55))
                         }
                         .buttonStyle(.plain)
+                        .help("Remove attachment")
                         .offset(x: 5, y: -5)
                     }
                 }

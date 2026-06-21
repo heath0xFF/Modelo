@@ -160,6 +160,7 @@ struct SettingsView: View {
                    stroke: Theme.amber.opacity(0.3))
         }
         .buttonStyle(.plain)
+        .help(label)
     }
 
     private func addMCPServer() {
@@ -239,6 +240,7 @@ private struct PersonaSettingsRow: View {
             }
             .contentShape(Rectangle())
             .onTapGesture { withAnimation(.easeOut(duration: 0.18)) { isExpanded.toggle() } }
+            .help(isExpanded ? "Collapse persona" : "Edit persona")
 
             if isExpanded {
                 VStack(alignment: .leading, spacing: 14) {
@@ -360,6 +362,7 @@ private struct PresetsSettingsTab: View {
                         .foregroundStyle(Theme.amber)
                 }
                 .buttonStyle(.plain)
+                .help("Add a preset")
                 .padding(.top, 4)
 
                 Text("Apply a preset to a chat from the sliders button in its header.")
@@ -448,8 +451,13 @@ private struct ServerSettingsRow: View {
     @Bindable var server: Server
     let onDelete: () -> Void
     @FocusState private var focus: Field?
+    @State private var apiKey = ""
+    @State private var isKeyRevealed = false
+    @State private var needsAuth = false
+    private let keychain = KeychainStore()
+    private var keychainAccount: String { Endpoint.keychainAccount(for: server) }
 
-    private enum Field { case label, host, port, agent, prometheus }
+    private enum Field { case label, host, port, key, agent, prometheus }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -488,6 +496,32 @@ private struct ServerSettingsRow: View {
                         .frame(width: 72)
                 }
                 .fixedSize()
+            }
+
+            // Live "is it working?" feedback — re-probes when host/port/runtime/key change.
+            ServerProbeRow(server: server, keyHint: apiKey, onNeedsAuth: { needsAuth = $0 })
+
+            // Shown only once the server actually asks for auth (401), or when a key
+            // is already set — so the common no-auth case stays uncluttered.
+            if needsAuth || !apiKey.isEmpty {
+                FieldGroup(caption: "API key") {
+                    HStack(spacing: 0) {
+                        Group {
+                            if isKeyRevealed { TextField("the key this server expects", text: $apiKey) }
+                            else { SecureField("the key this server expects", text: $apiKey) }
+                        }
+                        .textFieldStyle(.plain)
+                        .focused($focus, equals: .key)
+                        Button { isKeyRevealed.toggle() } label: {
+                            Image(systemName: isKeyRevealed ? "eye.slash" : "eye")
+                                .font(.system(size: 10)).foregroundStyle(Theme.textLo).padding(.trailing, 4)
+                        }
+                        .buttonStyle(.plain)
+                        .help(isKeyRevealed ? "Hide key" : "Reveal key")
+                    }
+                    .fieldChrome(focused: focus == .key)
+                }
+                .transition(.opacity)
             }
 
             FieldGroup(caption: "Agent URL") {
@@ -529,6 +563,10 @@ private struct ServerSettingsRow: View {
                 server.host = Server.normalizedHost(server.host)
             }
         }
+        .onAppear { apiKey = keychain.get(account: keychainAccount) ?? "" }
+        .onChange(of: apiKey) { _, newValue in
+            keychain.set(newValue.isEmpty ? nil : newValue, account: keychainAccount)
+        }
     }
 
     /// Runtime selector styled as a chip. Lists the local runtimes only
@@ -547,6 +585,90 @@ private struct ServerSettingsRow: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .help("Runtime")
+    }
+}
+
+// MARK: - Connection probe
+
+/// Live connection feedback for a local server row (#4): probes the endpoint's model
+/// list whenever host/port/runtime change and reports "Connected · N models", an
+/// error, or a manual re-check — so adding a server gives a clear "it's working"
+/// signal instead of silent auto-save.
+private struct ServerProbeRow: View {
+    let server: Server
+    /// The current key text — only used to re-probe when it changes (the request
+    /// itself reads the key from the Keychain via `Endpoint`).
+    var keyHint: String = ""
+    /// Reports whether the server answered with a 401/403, so the parent row can
+    /// reveal the API-key field exactly when it's needed.
+    var onNeedsAuth: (Bool) -> Void = { _ in }
+
+    @State private var state: ProbeState = .idle
+
+    private enum ProbeState: Equatable {
+        case idle, checking, ok(Int), needsKey, failed(String)
+    }
+
+    /// Re-probe whenever the connection-defining fields (or the key) change.
+    private var probeKey: String { "\(server.host)|\(server.port)|\(server.kindRaw)|\(keyHint)" }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            indicator
+            Spacer(minLength: 0)
+            Button("Test") { Task { await probe(debounce: false) } }
+                .buttonStyle(.plain)
+                .font(Theme.metric(10))
+                .foregroundStyle(Theme.textDim)
+                .help("Re-check this server's connection")
+                .disabled(state == .checking)
+        }
+        .task(id: probeKey) { await probe(debounce: true) }
+    }
+
+    @ViewBuilder private var indicator: some View {
+        switch state {
+        case .idle, .checking:
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text("Checking…").font(Theme.metric(11)).foregroundStyle(Theme.textFaint)
+            }
+        case .ok(let n):
+            Label("Connected · \(n) model\(n == 1 ? "" : "s")", systemImage: "checkmark.circle.fill")
+                .font(Theme.metric(11)).foregroundStyle(Theme.green)
+        case .needsKey:
+            Label("Connected — needs an API key", systemImage: "key.fill")
+                .font(Theme.metric(11)).foregroundStyle(Theme.amber)
+        case .failed(let why):
+            Label(why, systemImage: "exclamationmark.triangle.fill")
+                .font(Theme.metric(11)).foregroundStyle(Theme.Palette.alert)
+                .lineLimit(2)
+        }
+    }
+
+    private func probe(debounce: Bool) async {
+        // Debounce typing so we don't probe on every keystroke; manual Test skips it.
+        if debounce { try? await Task.sleep(for: .milliseconds(500)) }
+        if Task.isCancelled { return }
+        guard !server.host.trimmingCharacters(in: .whitespaces).isEmpty else { state = .idle; return }
+        state = .checking
+        let endpoint = Endpoint(server: server, keychain: KeychainStore())
+        do {
+            let models = try await LMStudioClient.shared.fetchModels(endpoint: endpoint)
+            if Task.isCancelled { return }
+            state = .ok(models.count)
+            onNeedsAuth(false)
+        } catch {
+            if Task.isCancelled { return }
+            if case ClientError.authRequired = error {
+                state = .needsKey
+                onNeedsAuth(true)              // reveal the key field
+            } else {
+                let msg = (error as? ClientError)?.errorDescription ?? "Couldn't reach this server."
+                state = .failed(msg)
+                onNeedsAuth(false)
+            }
+        }
     }
 }
 
@@ -1016,6 +1138,7 @@ private struct CategoryChip: View {
                                                        : Theme.line, lineWidth: 1))
         }
         .buttonStyle(.plain)
+        .help("Filter by \(label)")
     }
 }
 
@@ -1060,6 +1183,7 @@ private struct CatalogEntryRow: View {
                 .panel(Theme.fillHi, radius: 8, stroke: Theme.amber.opacity(0.3))
             }
             .buttonStyle(.plain)
+            .help("Add \(entry.name)")
         }
         .padding(14)
         .panel(Theme.popoverBG)

@@ -32,6 +32,7 @@ struct SamplingControls: View {
                     .font(.mono(11)).monospacedDigit()
                     .foregroundStyle(value.wrappedValue == nil ? Theme.textFaint : Theme.textLo)
                 PillToggle(isOn: on)
+                    .help("Toggle \(label.lowercased())")
             }
             if value.wrappedValue != nil {
                 Slider(value: Binding(get: { value.wrappedValue ?? fallback },
@@ -60,6 +61,7 @@ struct SamplingControls: View {
                 Text("default").font(.mono(11)).foregroundStyle(Theme.textFaint)
             }
             PillToggle(isOn: on)
+                .help("Toggle \(label.lowercased())")
         }
     }
 }
