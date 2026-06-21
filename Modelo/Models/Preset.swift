@@ -6,9 +6,6 @@ import SwiftData
 /// and sampling overrides onto a conversation.
 @Model
 final class Preset {
-    /// See `Conversation.id` — SwiftData bakes a stored default into the schema as a
-    /// single constant, so every instance must mint its own UUID in `init`.
-    var id: UUID = UUID()
     var name: String = ""
     var systemPrompt: String?
     /// JSON-encoded `SamplingParams` (kept as a string so the schema stays a scalar).
@@ -16,7 +13,6 @@ final class Preset {
     var sortOrder: Int = 0
 
     init(name: String, sortOrder: Int = 0) {
-        self.id = UUID()
         self.name = name
         self.sortOrder = sortOrder
     }

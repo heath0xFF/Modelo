@@ -166,8 +166,7 @@ struct ChatView: View {
 
     /// Applies a preset's system prompt (if any) and sampling overrides to this chat.
     private func apply(_ preset: Preset) {
-        if let sp = preset.systemPrompt { conversation.systemPrompt = sp }
-        conversation.samplingOverride = preset.sampling
+        conversation.apply(preset)
         try? context.save()
     }
 

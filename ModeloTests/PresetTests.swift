@@ -41,9 +41,7 @@ final class PresetTests: XCTestCase {
         preset.sampling = SamplingParams(temperature: 0.1, topP: 0.5)
         ctx.insert(preset)
 
-        // Mirrors ChatView.apply(_:)
-        if let sp = preset.systemPrompt { convo.systemPrompt = sp }
-        convo.samplingOverride = preset.sampling
+        convo.apply(preset)
 
         XCTAssertEqual(convo.systemPrompt, "Be terse.")
         XCTAssertEqual(convo.samplingOverride, SamplingParams(temperature: 0.1, topP: 0.5))

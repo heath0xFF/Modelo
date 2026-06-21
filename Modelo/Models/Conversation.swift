@@ -64,6 +64,13 @@ final class Conversation {
         }
     }
 
+    /// Applies a preset (§1.4b): its sampling overrides replace this chat's, and a
+    /// non-empty system prompt overwrites the chat's.
+    func apply(_ preset: Preset) {
+        if let prompt = preset.systemPrompt { systemPrompt = prompt }
+        samplingOverride = preset.sampling
+    }
+
     /// Sidebar label. Once the first turn finishes, `ChatSession` fills `title` in
     /// from a model run; until then it reads "New Chat" rather than a raw model id.
     var displayTitle: String {
