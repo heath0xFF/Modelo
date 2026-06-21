@@ -178,6 +178,7 @@ final class ChatSession {
                 errorText = (error as? ClientError)?.errorDescription ?? error.localizedDescription
                 if assistant.content.isEmpty && assistant.toolCallsJSON == nil {
                     conversation.dropLeaf(assistant)
+                    context.delete(assistant)
                 }
                 try? context.save()
                 return
@@ -213,6 +214,7 @@ final class ChatSession {
         if Task.isCancelled {
             if let last = lastAssistant, last.content.isEmpty, last.toolCallsJSON == nil {
                 conversation.dropLeaf(last)
+                context.delete(last)
             }
             try? context.save()
             return

@@ -20,8 +20,15 @@ enum BranchingMigration {
                             defaults: UserDefaults = .standard) {
         guard !defaults.bool(forKey: flagKey) else { return }
         backfill(in: context)
-        try? context.save()
-        defaults.set(true, forKey: flagKey)
+        // Only mark the migration done once it has actually persisted; otherwise a
+        // failed save would skip the backfill forever (conversations would still work
+        // via activePath's createdAt fallback, but never gain real tree links).
+        do {
+            try context.save()
+            defaults.set(true, forKey: flagKey)
+        } catch {
+            // Leave the flag unset so the backfill retries on the next launch.
+        }
     }
 
     /// The actual chaining pass, factored out so tests can exercise it directly
