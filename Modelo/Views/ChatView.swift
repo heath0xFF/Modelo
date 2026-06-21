@@ -34,7 +34,6 @@ struct ChatView: View {
     @Query(sort: \Preset.sortOrder) private var presets: [Preset]
     @State private var showSampling = false
     @State private var showBenchmark = false
-    private let keychain = KeychainStore()
 
 
     /// The server bound to this conversation (matches conversation.serverID).
@@ -189,13 +188,10 @@ struct ChatView: View {
                 .panel(Theme.Palette.panel, radius: 7)
         }
         .buttonStyle(.plain)
-        .help("Benchmark this model")
-        .disabled(pickedModel == nil)
+        .help("Benchmark a model")
+        .disabled(discovered.isEmpty)
         .sheet(isPresented: $showBenchmark) {
-            if let picked = pickedModel {
-                BenchmarkView(endpoint: Endpoint(server: picked.server, keychain: keychain),
-                              modelID: picked.model.id, modelName: picked.model.familyName)
-            }
+            BenchmarkView(discovered: discovered, initial: pickedModel)
         }
     }
 
