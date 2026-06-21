@@ -6,6 +6,8 @@ import Charts
 /// charts, and per-model / per-server tables, aggregated over a selectable window.
 struct ReportingView: View {
     @Query(sort: \UsageRecord.timestamp, order: .reverse) private var all: [UsageRecord]
+    @Environment(\.modelContext) private var context
+    @AppStorage(UsageRetention.key) private var retentionDays = 0
     @State private var timeRange: ReportCalculator.TimeRange = .week
 
     private var records: [UsageRecord]             { timeRange.filter(all) }
@@ -26,6 +28,10 @@ struct ReportingView: View {
                 }
             }
         )
+    }
+
+    private func prune() {
+        UsageRetention.prune(in: context, retentionDays: retentionDays)
     }
 
     var body: some View {
@@ -57,6 +63,8 @@ struct ReportingView: View {
             .padding(.vertical, 24)
         }
         .background(Theme.windowBG)
+        .onAppear(perform: prune)
+        .onChange(of: retentionDays) { prune() }
     }
 
     // MARK: - Header
@@ -67,10 +75,33 @@ struct ReportingView: View {
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(Theme.textHi)
             Spacer()
+            retentionMenu
             SegmentedPills(options: ReportCalculator.TimeRange.allCases.map(\.rawValue),
                            selection: rangeSelection,
                            boxed: true)
         }
+    }
+
+    /// Usage-retention control (§3.4). 0 = keep forever; otherwise old records are
+    /// pruned on launch and whenever this report opens or the window changes.
+    private var retentionMenu: some View {
+        Menu {
+            Picker("Keep usage", selection: $retentionDays) {
+                Text("Forever").tag(0)
+                Text("90 days").tag(90)
+                Text("60 days").tag(60)
+                Text("30 days").tag(30)
+                Text("14 days").tag(14)
+                Text("7 days").tag(7)
+            }
+        } label: {
+            Label(retentionDays == 0 ? "Keep: forever" : "Keep: \(retentionDays)d",
+                  systemImage: "clock.arrow.circlepath")
+                .font(.system(size: 12))
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("How long to keep usage records before pruning them.")
     }
 
     // MARK: - Stat tiles
