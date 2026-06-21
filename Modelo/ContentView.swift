@@ -85,7 +85,11 @@ struct ContentView: View {
                 .help("Toggle inference console (⌘I)")
             }
         }
-        .task(id: serverDiscoveryKey) { selectDefaultEndpoint(); await refreshModels() }
+        .task(id: serverDiscoveryKey) {
+            selectDefaultEndpoint()
+            gpuMonitor.start(servers: servers)   // pick up agent-URL / macmon changes
+            await refreshModels()
+        }
         .onAppear { restoreRoute() }
         .onChange(of: route) { saveRoute(route); syncPickedModel() }
         .focusedSceneValue(\.modeloCommands, ModeloCommands(
@@ -275,7 +279,7 @@ struct ContentView: View {
     /// Re-discover when a server is added/edited/removed (or comes online), not just
     /// when the online set changes — so a newly-configured server's models appear.
     private var serverDiscoveryKey: String {
-        servers.map { "\($0.id)|\($0.host)|\($0.port)|\($0.kindRaw)|\(registry.isOnline($0))" }
+        servers.map { "\($0.id)|\($0.host)|\($0.port)|\($0.kindRaw)|\(registry.isOnline($0))|\($0.metricsAgentURL ?? "")|\($0.localGPU)" }
             .joined(separator: ",")
     }
 

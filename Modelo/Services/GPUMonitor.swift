@@ -13,6 +13,8 @@ final class GPUMonitor {
     private(set) var snapshots: [UUID: GPUSnapshot] = [:]
 
     private var loops: [UUID: Task<Void, Never>] = [:]
+    private var macmonTask: Task<Void, Never>?
+    private var macmonProcess: Process?
     private let session: URLSession
     private let interval: Duration
 
@@ -30,7 +32,7 @@ final class GPUMonitor {
 
     func snapshot(for server: Server) -> GPUSnapshot? { snapshots[server.id] }
 
-    /// (Re)start polling for the given servers. Cancels any previous loops first.
+    /// (Re)start monitoring for the given servers. Cancels any previous work first.
     func start(servers: [Server]) {
         stop()
         for server in servers where server.kind.isLocal {
@@ -45,11 +47,40 @@ final class GPUMonitor {
                 }
             }
         }
+        // Local Apple-Silicon GPU via macmon (§2.2): one process feeds every server
+        // that opted in (they all run on this Mac, so they share the same reading).
+        let macmonIDs = servers.filter { $0.kind.isLocal && $0.localGPU }.map(\.id)
+        if !macmonIDs.isEmpty { startMacmon(for: macmonIDs) }
     }
 
     func stop() {
         for task in loops.values { task.cancel() }
         loops.removeAll()
+        macmonTask?.cancel(); macmonTask = nil
+        macmonProcess?.terminate(); macmonProcess = nil
+    }
+
+    /// Streams `macmon pipe` and republishes each sample to the opted-in servers.
+    private func startMacmon(for ids: [UUID]) {
+        guard let path = Macmon.resolvedPath() else { return }   // macmon not installed
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: path)
+        proc.arguments = ["pipe", "-i", "1500"]
+        let pipe = Pipe()
+        proc.standardOutput = pipe
+        proc.standardError = nil
+        do { try proc.run() } catch { return }
+        macmonProcess = proc
+        macmonTask = Task { [weak self] in
+            do {
+                for try await line in pipe.fileHandleForReading.bytes.lines {
+                    if Task.isCancelled { break }
+                    guard let snap = Macmon.parse(line) else { continue }
+                    guard let self else { break }
+                    for id in ids { self.snapshots[id] = snap }
+                }
+            } catch { /* process ended or read failed — leave last snapshot */ }
+        }
     }
 
     private func poll(id: UUID, agentURL: String) async {

@@ -539,6 +539,18 @@ private struct ServerSettingsRow: View {
                 .foregroundStyle(Theme.textFaint)
                 .fixedSize(horizontal: false, vertical: true)
 
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Read this Mac's GPU (macmon)").font(Theme.metric(12)).foregroundStyle(Theme.textMid)
+                    Text("For a server running on this Apple-Silicon Mac — shows local GPU on Status + the chat inspector. Requires the macmon CLI.")
+                        .font(Theme.metric(10)).foregroundStyle(Theme.textFaint)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                PillToggle(isOn: $server.localGPU)
+                    .help("Use the local macmon tool for this Mac's GPU metrics")
+            }
+
             FieldGroup(caption: "Prometheus URL") {
                 TextField("http://host:8000/metrics  ·  optional", text: Binding(
                     get: { server.prometheusURL ?? "" },

@@ -24,6 +24,10 @@ final class Server {
     /// For local servers: a backend's Prometheus `/metrics` endpoint (vLLM / llama.cpp /
     /// llama-swap), e.g. "http://spark:8000/metrics". nil/empty disables the scrape (§2.3).
     var prometheusURL: String?
+    /// For a server running on *this* Apple-Silicon Mac: read its GPU via the local
+    /// `macmon` tool and show it on the Status/inspector tiles (§2.2). Mutually
+    /// alternative to `metricsAgentURL` (which is for a remote NVIDIA box).
+    var localGPU: Bool = false
 
     var kind: ServerKind {
         get { ServerKind(rawValue: kindRaw) ?? .lmStudio }
