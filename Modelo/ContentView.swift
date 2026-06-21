@@ -73,7 +73,7 @@ struct ContentView: View {
                 }
         }
         .navigationTitle("")
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(Theme.active.scheme)
         .toolbarBackground(.hidden, for: .windowToolbar)
         .toolbar {
             ToolbarItem {

@@ -66,7 +66,7 @@ struct ModelPickerView: View {
                 }
             }
             // Force the dark theme so the popover never renders as a light system sheet.
-            .preferredColorScheme(.dark)
+            .preferredColorScheme(Theme.active.scheme)
         }
         // The trigger sits behind the open popover, so `onHover` can't fire to clear
         // a lingering hover. Reset it on dismiss so the chip doesn't stay "lifted".

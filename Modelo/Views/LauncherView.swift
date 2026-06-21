@@ -386,7 +386,7 @@ private struct PersonaEditPopover: View {
         .padding(20)
         .frame(width: 340)
         .background(Theme.windowBG)
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(Theme.active.scheme)
     }
 
     private var validIcon: String {
