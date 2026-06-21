@@ -10,14 +10,27 @@ Connects to **LM Studio** over your local network or Tailscale, and to any **Ope
 
 ## Features
 
-- **Chat** — streaming responses, Markdown rendering with syntax-highlighted and copyable code blocks, per-message token metrics, tool-use chip, adjustable text size
+- **Chat** — streaming responses, Markdown rendering with syntax-highlighted and copyable code blocks, per-message token metrics, slash commands (`/model`, `/temp`, `/system`, `/export`, `/skills`, …) with an autocomplete popup, queue messages while a reply streams, branch & regenerate any turn, adjustable text size
+- **Tools & agents** — opt-in first-party filesystem + shell tools, MCP servers, `~/.agents` skills, with reliability tuned for local models — see [below](#tools--agents)
 - **Model Picker** — grouped by server with per-model load state (selected / loaded / idle / cloud)
 - **Server Status** — live latency, throughput, and request sparklines with a streaming console
-- **Reports** — throughput and TTFT charts (Swift Charts) with a per-model usage table
-- **Settings** — LM Studio endpoints, cloud API endpoints (any OpenAI-compatible base URL), personas, Firecrawl key, MCP servers
+- **Reports** — throughput and TTFT charts (Swift Charts), a per-model usage table, and configurable usage retention
+- **Themes** — Dark (default), Light, and Catppuccin Latte / Frappé / Macchiato / Mocha, switchable live in Settings ▸ Appearance
+- **Settings** — LM Studio endpoints, cloud API endpoints (any OpenAI-compatible base URL), personas, filesystem/shell tools, Firecrawl key, MCP servers
 - **Personas** — system prompt presets with icons and taglines
 - **MCP Servers** — built-in discovery and management of Model Context Protocol tool servers
 - **Menu bar mini chat** — quick-access popover from the menu bar
+
+## Tools & agents
+
+Modelo gives models a layered tool stack, designed so that even small/quantized **local** models can find and use tools reliably:
+
+- **First-party filesystem & shell tools** — `read_file`, `write_file`, `edit_file`, `grep`, `glob`, `bash`. **Opt-in and off by default**: enable them in **Settings ▸ Tools** and pick a workspace folder (defaults to an auto-created `~/.modelo` sandbox) that all file access is confined to — path traversal is blocked. `bash` is behind its own separate toggle. Read-only tools run automatically; **writes, edits, and shell commands pause for an in-chat approval card** (Deny / Approve once / Approve for session) showing the content, diff, or command first.
+- **MCP servers** — the standard way to add external/custom tools; managed in Settings.
+- **`~/.agents` skills** — the portable, cross-tool `~/.agents/skills/<name>/SKILL.md` convention (shared with other agents on the machine), surfaced via a `use_skill` tool.
+- **Local-model reliability** — a tolerant parser recovers tool calls a model emits as text (`<tool_call>…</tool_call>`, fenced JSON) when the server doesn't produce native `tool_calls`, and **progressive disclosure** shows only the most relevant tools per request plus a `find_tools` meta-tool, so a large tool set doesn't overwhelm the model.
+
+Tools are also gated by each chat's **Tools** toggle and the model's tool-use capability.
 
 ## Remote GPU telemetry (`modelo-tap`)
 
@@ -47,12 +60,15 @@ Build the **Modelo2** scheme. Swift Package Manager resolves dependencies automa
 
 ```
 Modelo/
-├── Theme.swift                  # design tokens, shared controls, Color(hex:)
+├── Theme.swift / ThemePalette.swift  # design tokens + selectable theme palettes
 ├── ModeloApp.swift              # @main entry point
 ├── ContentView.swift            # NavigationSplitView shell + routing + toolbar
-├── Models/                      # Server, LMStudioModel, Message, Conversation, Persona, Folder
+├── Models/                      # Server, LMStudioModel, Message, Conversation, Persona,
+│                                # Folder, UsageRecord, Preset
 ├── Services/                    # LMStudioClient, ReachabilityMonitor, ServerRegistry,
-│                                # MCPClient, FirecrawlClient, KeychainStore, Endpoint
+│                                # ChatSession, ToolRegistry, FilesystemTools, ToolSelector,
+│                                # ToolCallParser, MCPClient, AgentsLoader, FirecrawlClient,
+│                                # KeychainStore, Endpoint, UsageRetention
 ├── Settings/                    # SettingsView + row components
 └── Views/                       # Sidebar, Chat, ModelPicker, Status, Reports,
                                  # LauncherView, MenuBarChat, ModelBrowser
