@@ -102,6 +102,7 @@ struct SettingsView: View {
             // MARK: Tools
             ScrollView {
                 VStack(spacing: 12) {
+                    FilesystemToolsCard()
                     KeyCard(caption: "Firecrawl API key",
                             placeholder: "fc-…",
                             hint: "Enables firecrawl_scrape and firecrawl_search for tool-capable models.",
@@ -382,6 +383,70 @@ private struct PresetsSettingsTab: View {
     private func addPreset() {
         context.insert(Preset(name: "New Preset", sortOrder: presets.count))
         try? context.save()
+    }
+}
+
+/// Opt-in controls for the first-party filesystem/shell tools. Off by default; a
+/// workspace folder is required, and mutating actions still confirm in chat.
+private struct FilesystemToolsCard: View {
+    @AppStorage(FSToolSettings.enabledKey) private var enabled = false
+    @AppStorage(FSToolSettings.shellKey)   private var shell = false
+    @AppStorage(FSToolSettings.rootKey)    private var root = ""
+
+    var body: some View {
+        SettingsSection("Filesystem & shell tools") {
+            VStack(alignment: .leading, spacing: 12) {
+                Toggle(isOn: $enabled) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Let models read & edit files").font(Theme.metric(12)).foregroundStyle(Theme.textHi)
+                        Text("read_file · write_file · edit_file · grep · glob — confined to the workspace folder below.")
+                            .font(Theme.metric(10)).foregroundStyle(Theme.textFaint)
+                    }
+                }
+                .toggleStyle(.switch)
+
+                HStack(spacing: 10) {
+                    Image(systemName: "folder")
+                        .font(.system(size: 12)).foregroundStyle(Theme.textMute)
+                    Text(root.isEmpty ? "No workspace folder selected" : root)
+                        .font(.mono(11))
+                        .foregroundStyle(root.isEmpty ? Theme.textFaint : Theme.textMid)
+                        .lineLimit(1).truncationMode(.middle)
+                    Spacer(minLength: 8)
+                    Button(root.isEmpty ? "Choose…" : "Change…", action: chooseFolder)
+                        .font(Theme.metric(11))
+                }
+                .opacity(enabled ? 1 : 0.5)
+
+                Toggle(isOn: $shell) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Allow the bash tool").font(Theme.metric(12)).foregroundStyle(Theme.textHi)
+                        Text("Runs shell commands in the workspace. Highest risk — every command asks for approval.")
+                            .font(Theme.metric(10)).foregroundStyle(Theme.textFaint)
+                    }
+                }
+                .toggleStyle(.switch)
+                .disabled(!enabled)
+                .opacity(enabled ? 1 : 0.5)
+
+                Text("Off by default. Writes, edits, and shell commands always ask for approval in the chat. The model must support tools and the chat's Tools toggle must be on. Re-open a chat after changing these.")
+                    .font(Theme.metric(10))
+                    .foregroundStyle(Theme.textFaint)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func chooseFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Use as Workspace"
+        if panel.runModal() == .OK, let url = panel.url {
+            root = url.path
+            if !enabled { enabled = true }
+        }
     }
 }
 

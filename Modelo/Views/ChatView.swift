@@ -37,6 +37,10 @@ struct ChatView: View {
     @AppStorage("messageFontSize") private var messageFontSize: Double = 15
     // Global sampling defaults (JSON-encoded SamplingParams), edited in Settings ▸ Sampling.
     @AppStorage("globalSamplingJSON") private var globalSamplingJSON = "{}"
+    // First-party filesystem/shell tools — opt-in, off by default (Settings ▸ Tools).
+    @AppStorage(FSToolSettings.enabledKey) private var fsToolsEnabled = false
+    @AppStorage(FSToolSettings.shellKey)   private var shellToolEnabled = false
+    @AppStorage(FSToolSettings.rootKey)    private var fsToolsRoot = ""
     @Query(sort: \Preset.sortOrder) private var presets: [Preset]
     @State private var showSampling = false
     @State private var showBenchmark = false
@@ -354,6 +358,15 @@ struct ChatView: View {
                 .background(Theme.amberFillLo)
             }
 
+            // Mutating tool call awaiting the user's go-ahead (file/shell tools).
+            if let pending = session?.pendingApproval {
+                ToolApprovalCard(pending: pending,
+                                 approve: { session?.respondToApproval(true) },
+                                 deny: { session?.respondToApproval(false) })
+                    .padding(.horizontal, 16)
+                    .padding(.top, 10)
+            }
+
             // Slash-command autocomplete (§3.1): appears when the draft starts with "/".
             slashSuggestions
 
@@ -665,6 +678,8 @@ struct ChatView: View {
         }
         // Include tools from any connected MCP servers.
         tools += mcpManager.availableTools
+        // First-party filesystem/shell tools — opt-in, confined to the chosen workspace.
+        tools += FSToolSettings.tools(enabled: fsToolsEnabled, shell: shellToolEnabled, root: fsToolsRoot)
         // Expose ~/.agents skills via a use_skill tool (§3.7).
         let skills = AgentsLoader.loadSkills()
         if !skills.isEmpty { tools.append(UseSkillTool(skills: skills)) }
@@ -872,6 +887,70 @@ private struct SlashSuggestionRow: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
+    }
+}
+
+/// Confirmation card for a mutating file/shell tool call. Shows what the model wants
+/// to do (write/edit a file, run a command) and waits for Approve / Deny.
+private struct ToolApprovalCard: View {
+    let pending: ChatSession.PendingApproval
+    let approve: () -> Void
+    let deny: () -> Void
+
+    private var icon: String {
+        switch pending.preview.kind {
+        case .write: "square.and.pencil"
+        case .edit:  "pencil.and.outline"
+        case .shell: "terminal"
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.amber)
+                Text(pending.preview.title)
+                    .font(Theme.metric(12))
+                    .foregroundStyle(Theme.textHi)
+                Spacer(minLength: 0)
+                Text(pending.toolName)
+                    .font(.mono(10))
+                    .foregroundStyle(Theme.textFaint)
+            }
+            ScrollView {
+                Text(pending.preview.detail)
+                    .font(Theme.code(11))
+                    .foregroundStyle(Theme.textMid)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
+            }
+            .frame(maxHeight: 160)
+            .background(Theme.consoleBG, in: RoundedRectangle(cornerRadius: Theme.Radius.field))
+            .overlay(RoundedRectangle(cornerRadius: Theme.Radius.field).stroke(Theme.line))
+
+            HStack(spacing: 8) {
+                Spacer()
+                Button("Deny", action: deny)
+                    .buttonStyle(.plain)
+                    .font(Theme.metric(12))
+                    .foregroundStyle(Theme.textLo)
+                    .padding(.horizontal, 12).padding(.vertical, 5)
+                    .background(Theme.fill, in: RoundedRectangle(cornerRadius: 7))
+                    .overlay(RoundedRectangle(cornerRadius: 7).stroke(Theme.line))
+                Button("Approve", action: approve)
+                    .buttonStyle(.plain)
+                    .font(Theme.metric(12).weight(.semibold))
+                    .foregroundStyle(.black)
+                    .padding(.horizontal, 14).padding(.vertical, 5)
+                    .background(Theme.sendGradient, in: RoundedRectangle(cornerRadius: 7))
+            }
+        }
+        .padding(11)
+        .background(Theme.amberFillLo, in: RoundedRectangle(cornerRadius: Theme.Radius.card))
+        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.card).stroke(Theme.amberBorder))
     }
 }
 

@@ -15,6 +15,12 @@ struct ToolRegistry: Sendable {
 
     func specs() -> [ToolSpec] { tools.values.map(ToolSpec.init) }
 
+    /// The approval preview for a mutating tool call, or nil if the tool runs without
+    /// confirmation (read-only) or is unknown.
+    func approvalPreview(name: String, argumentsJSON: String) -> ToolApprovalPreview? {
+        tools[name]?.approvalPreview(argumentsJSON: argumentsJSON)
+    }
+
     func execute(name: String, argumentsJSON: String) async -> String {
         guard let tool = tools[name] else { return "Error: unknown tool \"\(name)\"." }
         do { return try await tool.execute(argumentsJSON: argumentsJSON) }
