@@ -9,8 +9,35 @@ import SwiftData
 final class ChatSession {
     private(set) var isStreaming = false
     var errorText: String?
+    /// Set while a mutating tool call is waiting on the user's approval; the chat view
+    /// observes this and shows an approval card. `resume` continues the paused turn.
+    var pendingApproval: PendingApproval?
 
     static let maxToolRounds = 5
+
+    /// A mutating tool call paused for confirmation (file/shell tools).
+    struct PendingApproval: Identifiable {
+        let id = UUID()
+        let toolName: String
+        let preview: ToolApprovalPreview
+        let resume: @MainActor (Bool) -> Void
+    }
+
+    /// Resolve the pending approval with the user's decision (from the approval card).
+    func respondToApproval(_ approved: Bool) {
+        let pending = pendingApproval
+        pendingApproval = nil
+        pending?.resume(approved)
+    }
+
+    /// Suspend until the user approves/denies a mutating tool call.
+    private func requestApproval(toolName: String, preview: ToolApprovalPreview) async -> Bool {
+        await withCheckedContinuation { cont in
+            pendingApproval = PendingApproval(toolName: toolName, preview: preview) { decision in
+                cont.resume(returning: decision)
+            }
+        }
+    }
 
     private let client: any ChatProvider
     private let context: ModelContext
@@ -202,15 +229,33 @@ final class ChatSession {
 
             // Stopped mid-stream: don't execute tools or start another round.
             if Task.isCancelled { break }
+
+            // Fallback: recover tool calls the model emitted as text (common on local
+            // models whose template doesn't produce native tool_calls), and strip the
+            // raw markup from what we display.
+            if toolCalls.isEmpty && toolsActive {
+                let (parsed, cleaned) = ToolCallParser.extract(from: assistant.content)
+                if !parsed.isEmpty {
+                    toolCalls = parsed
+                    assistant.content = cleaned
+                }
+            }
             if toolCalls.isEmpty { break }   // model produced a final answer
 
             assistant.toolCallsJSON = toolCalls.json
             for call in toolCalls {
+                if Task.isCancelled { break }
+                // Mutating tools (write/edit/bash) pause for the user's approval.
+                if let preview = registry.approvalPreview(name: call.name, argumentsJSON: call.arguments) {
+                    let approved = await requestApproval(toolName: call.name, preview: preview)
+                    if Task.isCancelled { break }
+                    if !approved {
+                        appendToolResult("The user declined to run \(call.name).", call: call, in: conversation)
+                        continue
+                    }
+                }
                 let result = await registry.execute(name: call.name, argumentsJSON: call.arguments)
-                let toolMsg = Message(role: .tool, content: result)
-                toolMsg.toolCallID = call.id
-                toolMsg.toolName = call.name
-                conversation.appendToPath(toolMsg)
+                appendToolResult(result, call: call, in: conversation)
             }
             try? context.save()
 
@@ -271,6 +316,16 @@ final class ChatSession {
     func cancelPendingWork() {
         titleTask?.cancel()
         titleTask = nil
+        // Release a turn paused on an approval prompt so its continuation can't leak.
+        respondToApproval(false)
+    }
+
+    /// Append a tool's result onto the active path as a `.tool` message.
+    private func appendToolResult(_ content: String, call: ToolCall, in conversation: Conversation) {
+        let toolMsg = Message(role: .tool, content: content)
+        toolMsg.toolCallID = call.id
+        toolMsg.toolName = call.name
+        conversation.appendToPath(toolMsg)
     }
 
     /// Auto-compaction (§1.5): when enabled and the active path's estimated tokens
