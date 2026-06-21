@@ -282,8 +282,8 @@ final class ChatSession {
         guard conversation.autoCompact, contextWindow > 0 else { return }
         let path = conversation.activePath().filter(wireKeep)
         let estimate = TokenEstimator.estimate(path) + TokenEstimator.estimate(conversation.summary ?? "")
-        guard Double(estimate) > conversation.compactThreshold * Double(contextWindow) else { return }
-        let toSummarize = path.dropLast(conversation.compactKeep)
+        guard Double(estimate) > (conversation.compactThresholdPct ?? 0.85) * Double(contextWindow) else { return }
+        let toSummarize = path.dropLast(conversation.compactKeepRecent ?? 8)
         guard let cutoff = toSummarize.last else { return }
 
         let transcript = toSummarize

@@ -97,10 +97,6 @@ final class Conversation {
         set { summaryThroughData = newValue.flatMap { try? JSONEncoder().encode($0.persistentModelID) } }
     }
 
-    /// Compact threshold and keep-recent with their defaults applied.
-    var compactThreshold: Double { compactThresholdPct ?? 0.85 }
-    var compactKeep: Int { compactKeepRecent ?? 8 }
-
     /// The context to send for the next request, applying any compaction summary:
     /// the system prompt (with the summary appended) and the messages to send — those
     /// after the summarized cutoff, or the whole active path when there's no summary.
