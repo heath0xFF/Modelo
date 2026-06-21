@@ -6,7 +6,7 @@ enum Percentile {
     static func value(_ xs: [Double], _ p: Double) -> Double {
         guard !xs.isEmpty else { return 0 }
         let s = xs.sorted()
-        guard s.count > 1 else { return s[0] }
+        // Single-element inputs fall out correctly: rank = 0, lo = hi = 0 → s[0].
         let rank = max(0, min(1, p)) * Double(s.count - 1)
         let lo = Int(rank.rounded(.down))
         let hi = Int(rank.rounded(.up))
