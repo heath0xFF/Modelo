@@ -64,15 +64,10 @@ final class Conversation {
     /// The currently-selected path, root→leaf. Falls back to `createdAt` order for
     /// conversations that predate branching (no tree links yet).
     ///
-    /// On the `activeLeaf ?? ordered.last` fallback: a message inserted this run holds
-    /// a *temporary* `persistentModelID` until the next `save()`, after which the id
-    /// stored in `activeLeafData` no longer resolves and `activeLeaf` reads `nil` until
-    /// re-encoded. That window is harmless: the only message in that state is the one
-    /// just appended while streaming, which is also the newest by `createdAt` — so
-    /// `ordered.last` is exactly the leaf we want, and walking its `parent` links yields
-    /// the correct path. `selectBranch` and the end-of-turn re-encode both set
-    /// `activeLeaf` from already-saved (permanent-id) messages, so navigation resolves
-    /// precisely.
+    /// `ordered.last` fallback: a just-inserted leaf's temporary `persistentModelID`
+    /// stops resolving after `save()`, so `activeLeaf` reads `nil` until re-encoded —
+    /// harmless, since that leaf is also the newest by `createdAt`. Navigation (where
+    /// the exact leaf matters) always sets `activeLeaf` from a saved, permanent-id row.
     func activePath() -> [Message] {
         let ordered = messages.sorted { $0.createdAt < $1.createdAt }
         let hasTree = messages.contains { $0.parent != nil }
