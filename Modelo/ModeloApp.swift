@@ -31,6 +31,8 @@ struct ModeloApp: App {
         Persona.seedDefaults(in: ctx)
         // Backfill the branching tree (§1.2) for pre-existing flat conversations.
         BranchingMigration.runIfNeeded(in: ctx)
+        // Prune old usage records per the retention setting (§3.4; 0 = keep forever).
+        UsageRetention.prune(in: ctx, retentionDays: UserDefaults.standard.integer(forKey: UsageRetention.key))
         _registry = State(initialValue: registry)
 
         // Reachability probe: single-shot short-timeout check (NOT fetchModels —
