@@ -12,6 +12,13 @@ struct ModeloApp: App {
     @State private var mcpManager = MCPServerManager()
     // Drives chat text size; matches the @AppStorage default used in the views.
     @AppStorage("messageFontSize") private var messageFontSize: Double = 15
+    // Selected color theme (§3.5). Reading this in a scene body makes that scene
+    // rebuild when the theme changes; `palette` applies it to `Theme.active`.
+    @AppStorage("themeID") private var themeID = ThemeID.dark.rawValue
+
+    /// Applies the stored theme to `Theme.active` and returns it. Called in each scene
+    /// body (before its `.id(themeID)` subtree builds) so colors repaint on change.
+    private var palette: ThemePalette { Theme.applyStored(themeID) }
 
     init() {
         let schema = Schema([Server.self, Conversation.self, Message.self, UsageRecord.self, Persona.self, Folder.self, Preset.self])
@@ -33,6 +40,8 @@ struct ModeloApp: App {
         BranchingMigration.runIfNeeded(in: ctx)
         // Prune old usage records per the retention setting (§3.4; 0 = keep forever).
         UsageRetention.prune(in: ctx, retentionDays: UserDefaults.standard.integer(forKey: UsageRetention.key))
+        // Apply the saved theme before the first frame (§3.5).
+        Theme.applyStored(UserDefaults.standard.string(forKey: "themeID") ?? ThemeID.dark.rawValue)
         _registry = State(initialValue: registry)
 
         // Reachability probe: single-shot short-timeout check (NOT fetchModels —
@@ -55,6 +64,8 @@ struct ModeloApp: App {
                 .environment(mcpManager)
                 .task { await startMonitoring() }
                 .task { mcpManager.startAll() }
+                .preferredColorScheme(palette.scheme)
+                .id(themeID)   // rebuild the tree so static Theme.* reads repaint (§3.5)
         }
         .defaultSize(width: 1100, height: 720)
         .modelContainer(container)
@@ -92,6 +103,8 @@ struct ModeloApp: App {
                 .environment(serverMonitor)
                 .environment(mcpManager)
                 .modelContainer(container)
+                .preferredColorScheme(palette.scheme)
+                .id(themeID)
         } label: {
             Image(nsImage: Self.bottleMenuBarIcon)
         }
@@ -103,6 +116,8 @@ struct ModeloApp: App {
                 .environment(mcpManager)
                 .toolbarBackground(.hidden, for: .windowToolbar)
                 .navigationTitle("")
+                .preferredColorScheme(palette.scheme)
+                .id(themeID)
         }
         .windowResizability(.contentSize)
     }

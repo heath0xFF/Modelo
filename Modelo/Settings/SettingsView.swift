@@ -95,6 +95,10 @@ struct SettingsView: View {
             PresetsSettingsTab()
                 .tabItem { Label("Presets", systemImage: "square.stack.3d.up") }
 
+            // MARK: Appearance (§3.5)
+            AppearanceSettingsTab()
+                .tabItem { Label("Appearance", systemImage: "paintpalette") }
+
             // MARK: Tools
             ScrollView {
                 VStack(spacing: 12) {
@@ -141,7 +145,7 @@ struct SettingsView: View {
         }
         .background(Theme.windowBG)
         .tint(Theme.amber)
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(Theme.active.scheme)
     }
 
     private func addButton(_ label: String, action: @escaping () -> Void) -> some View {
@@ -378,6 +382,70 @@ private struct PresetsSettingsTab: View {
     private func addPreset() {
         context.insert(Preset(name: "New Preset", sortOrder: presets.count))
         try? context.save()
+    }
+}
+
+/// Theme picker (§3.5): a swatch + label per palette, applied live via `@AppStorage`.
+private struct AppearanceSettingsTab: View {
+    @AppStorage("themeID") private var themeID = ThemeID.dark.rawValue
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                SettingsSection("Theme") {
+                    VStack(spacing: 8) {
+                        ForEach(ThemeID.allCases) { theme in
+                            ThemeRow(theme: theme, selected: themeID == theme.rawValue) {
+                                themeID = theme.rawValue
+                            }
+                        }
+                    }
+                }
+                Text("Chat text size lives in the View menu (⌘+ / ⌘- / ⌘0) and the A−/A+ control in a chat header.")
+                    .font(Theme.metric(10))
+                    .foregroundStyle(Theme.textFaint)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(24)
+        }
+        .clipped()
+    }
+}
+
+private struct ThemeRow: View {
+    let theme: ThemeID
+    let selected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        let p = theme.palette
+        Button(action: action) {
+            HStack(spacing: 12) {
+                HStack(spacing: 0) {
+                    ForEach(Array([p.windowBG, p.panelHigh, p.amber, p.green, p.textHi].enumerated()), id: \.offset) { _, c in
+                        Rectangle().fill(c).frame(width: 15, height: 26)
+                    }
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 5))
+                .overlay(RoundedRectangle(cornerRadius: 5).stroke(Theme.line))
+
+                Text(theme.label)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.textHi)
+                Spacer()
+                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 14))
+                    .foregroundStyle(selected ? Theme.amber : Theme.textDim)
+            }
+            .padding(10)
+            .background(selected ? Theme.amberFillLo : Theme.fill,
+                        in: RoundedRectangle(cornerRadius: Theme.Radius.field))
+            .overlay(RoundedRectangle(cornerRadius: Theme.Radius.field)
+                .stroke(selected ? Theme.amberBorder : Theme.line))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Use the \(theme.label) theme")
     }
 }
 
