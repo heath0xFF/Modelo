@@ -30,6 +30,8 @@ Completed item status: ✅ done · 🔶 in progress / in review · ⬜ not start
   `branch`/`dropLeaf`; `BranchingMigration` launch backfill; `send` rewritten onto the active
   path; `◀ k/n ▶` sibling nav + edit-as-branch (PR #6, stacked on #5). Builds green, 78 tests
   pass; pending merge + on-device migration verification. Root branching deferred.
+  Self-review follow-ups (dropLeaf orphan, monotonic branchIndex, migration flag-on-save)
+  in PR #9, stacked on #8.
 - 🔶 **§1.3 Regenerate assistant response** — shared `runTurn` extracted from `send`; new
   `ChatSession.regenerate` forks an assistant sibling under the same user parent and streams
   into it; "Regenerate" footer action + `◀ k/n ▶` now lights up on assistant turns (PR #7,
