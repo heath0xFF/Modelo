@@ -19,14 +19,13 @@ struct ComposerField: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
-    func makeNSView(context: Context) -> PlaceholderTextView {
+    func makeNSView(context: Context) -> NSScrollView {
         let tv = PlaceholderTextView()
         tv.delegate = context.coordinator
         tv.isRichText = false
         tv.allowsUndo = true
         tv.drawsBackground = false
         tv.textContainerInset = NSSize(width: 0, height: 0)
-        tv.textContainer?.lineFragmentPadding = 0
         tv.font = .systemFont(ofSize: fontSize)
         tv.textColor = NSColor(Theme.textHi)
         tv.string = text
@@ -34,10 +33,29 @@ struct ComposerField: NSViewRepresentable {
         tv.onFocusChange = { focused in
             DispatchQueue.main.async { if isFocused != focused { isFocused = focused } }
         }
-        return tv
+        // Let the text view grow vertically inside the scroll view while its width
+        // tracks the visible area (so lines wrap instead of scrolling horizontally).
+        tv.isVerticallyResizable = true
+        tv.isHorizontallyResizable = false
+        tv.autoresizingMask = [.width]
+        tv.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        tv.textContainer?.lineFragmentPadding = 0
+        tv.textContainer?.widthTracksTextView = true
+
+        // Wrap in a scroll view so content past `maxLines` scrolls instead of clipping.
+        let scroll = NSScrollView()
+        scroll.documentView = tv
+        scroll.drawsBackground = false
+        scroll.borderType = .noBorder
+        scroll.hasVerticalScroller = true
+        scroll.hasHorizontalScroller = false
+        scroll.scrollerStyle = .overlay
+        scroll.verticalScrollElasticity = .allowed
+        return scroll
     }
 
-    func updateNSView(_ tv: PlaceholderTextView, context: Context) {
+    func updateNSView(_ scroll: NSScrollView, context: Context) {
+        guard let tv = scroll.documentView as? PlaceholderTextView else { return }
         context.coordinator.parent = self
         if tv.string != text { tv.string = text }
         if tv.font?.pointSize != fontSize { tv.font = .systemFont(ofSize: fontSize) }
