@@ -54,6 +54,9 @@ struct ChatView: View {
     @AppStorage("messageFontSize") private var messageFontSize: Double = 15
     // Global sampling defaults (JSON-encoded SamplingParams), edited in Settings ▸ Sampling.
     @AppStorage("globalSamplingJSON") private var globalSamplingJSON = "{}"
+    // Max agentic tool rounds per turn — configurable in Settings ▸ Tools, applied to
+    // the session at creation and kept in sync while the chat is open.
+    @AppStorage("globalMaxToolRounds") private var maxToolRounds = ChatSession.defaultMaxToolRounds
     // First-party filesystem/shell tools — opt-in, off by default (Settings ▸ Tools).
     @AppStorage(FSToolSettings.enabledKey) private var fsToolsEnabled = false
     @AppStorage(FSToolSettings.shellKey)   private var shellToolEnabled = false
@@ -163,6 +166,8 @@ struct ChatView: View {
         .background(Theme.windowBG)
         .onAppear { ensureSession() }
         .onDisappear { cancelInFlight() }
+        // Keep an open chat's tool-call cap in sync with the Settings ▸ Tools value.
+        .onChange(of: maxToolRounds) { session?.maxToolRounds = maxToolRounds }
         .onChange(of: openArtifactID) { old, new in
             if let new { lastArtifactID = new }
             withAnimation(.easeOut(duration: 0.2)) {
@@ -806,7 +811,8 @@ struct ChatView: View {
                               recorder: UsageRecorder(context: context),
                               keychain: keychain,
                               registry: ToolRegistry(tools),
-                              systemSuffix: artifactsEnabled ? ArtifactInstructions.system : nil)
+                              systemSuffix: artifactsEnabled ? ArtifactInstructions.system : nil,
+                              maxToolRounds: maxToolRounds)
         composerFocused = true
     }
 
