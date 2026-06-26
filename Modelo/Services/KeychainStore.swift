@@ -37,9 +37,14 @@ struct KeychainStore {
         for (svc, dataProtection) in fallbacks {
             if let value = readItem(account: account, service: svc, dataProtection: dataProtection) {
                 set(value, account: account)
-                // Remove the migrated source item, otherwise a later clear() of the
-                // current key could be silently "restored" from this leftover on next read.
-                SecItemDelete(baseQuery(account: account, service: svc, dataProtection: dataProtection) as CFDictionary)
+                // Only remove the migrated source once the value is confirmed in the current
+                // service's data-protection keychain. If that write failed (e.g. the
+                // data-protection keychain is unavailable, as in an unsigned test process),
+                // deleting the source would destroy the only copy. A leftover that survives
+                // here is still cleared by delete(), which removes every location.
+                if readItem(account: account, service: service, dataProtection: true) == value {
+                    SecItemDelete(baseQuery(account: account, service: svc, dataProtection: dataProtection) as CFDictionary)
+                }
                 return value
             }
         }
@@ -56,11 +61,20 @@ struct KeychainStore {
         var query = baseQuery(account: account, service: service, dataProtection: true)
         let attrs = [kSecValueData as String: data] as CFDictionary
         let status = SecItemUpdate(query as CFDictionary, attrs)
+        if status == errSecSuccess { return }
         if status == errSecItemNotFound {
             query[kSecValueData as String] = data
             // Accessible after first device unlock — no repeated password prompts.
             query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
-            SecItemAdd(query as CFDictionary, nil)
+            if SecItemAdd(query as CFDictionary, nil) == errSecSuccess { return }
+        }
+        // Data-protection keychain unavailable (e.g. unsigned test process); fall back
+        // to the legacy keychain. get() already checks (service, dataProtection: false).
+        var legacyQuery = baseQuery(account: account, service: service, dataProtection: false)
+        let legacyStatus = SecItemUpdate(legacyQuery as CFDictionary, attrs)
+        if legacyStatus == errSecItemNotFound {
+            legacyQuery[kSecValueData as String] = data
+            SecItemAdd(legacyQuery as CFDictionary, nil)
         }
     }
 

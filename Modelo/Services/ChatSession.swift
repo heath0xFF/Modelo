@@ -19,7 +19,7 @@ final class ChatSession {
 
     /// Default cap on agentic tool rounds per turn, used when a session doesn't
     /// specify one. Mirrors the `globalMaxToolRounds` UserDefaults default.
-    static let defaultMaxToolRounds = 5
+    nonisolated static let defaultMaxToolRounds = 5
     /// Max agentic tool rounds this turn may run before the loop stops with a
     /// notice. Configurable per session and seeded from the global default
     /// (Settings ▸ Tools); the owning view keeps it in sync with the setting.
