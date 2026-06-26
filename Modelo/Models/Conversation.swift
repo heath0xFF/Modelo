@@ -26,6 +26,11 @@ final class Conversation {
     /// when the bound model advertises tool support.
     var toolsEnabled: Bool = true
 
+    /// Absolute path of the project directory this conversation is scoped to.
+    /// Set when the conversation is started from the Projects sidebar. Filesystem
+    /// tools operate within this root; nil means no project context.
+    var projectPath: String?
+
     /// Folder this conversation is filed in; nil = unfiled (date-bucketed). Inverse
     /// of `Folder.conversations`.
     var folder: Folder?

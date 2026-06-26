@@ -285,21 +285,27 @@ struct ContentView: View {
         try? context.save()
     }
 
-    /// Creates a new conversation with the project directory path and top-level file listing
-    /// injected as the system prompt, then navigates to it.
+    /// Creates a new conversation scoped to a project directory. The project path
+    /// is stored on the conversation so filesystem tools can be registered, and a
+    /// system prompt tells the model which tools are available and how to use them.
     private func newChatInProject(_ project: Project) {
-        let raw = (try? FileManager.default.contentsOfDirectory(atPath: project.path)) ?? []
-        let listing = raw.filter { !$0.hasPrefix(".") }.sorted().prefix(40).joined(separator: "\n")
         let systemPrompt = """
-        You are working in the project directory "\(project.name)".
+        You are a coding assistant working in the project directory "\(project.name)".
 
-        Path: \(project.path)
+        Project root: \(project.path)
 
-        Top-level contents:
-        \(listing.isEmpty ? "(empty or unreadable)" : listing)
+        You have the following filesystem tools available. All paths are relative to the project root.
+        - list_directory(path?) — list directory contents
+        - read_file(path) — read a file's text content
+        - search_files(query, path?, case_sensitive?) — grep files for a string or regex
+        - write_file(path, content) — create or overwrite a file
+        - edit_file(path, old_string, new_string) — replace an exact string in a file (must match exactly once)
+
+        Start by listing the project root to orient yourself before answering questions about the code.
         """
         let convo = Conversation(modelID: pickedModel?.model.id ?? "", serverID: pickedModel?.server.id)
         convo.systemPrompt = systemPrompt
+        convo.projectPath = project.path
         context.insert(convo)
         try? context.save()
         route = .conversation(convo.persistentModelID)

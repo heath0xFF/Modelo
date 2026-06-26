@@ -386,6 +386,12 @@ struct ChatView: View {
         }
         // Include tools from any connected MCP servers.
         tools += mcpManager.availableTools
+        // Filesystem tools are registered when the conversation is scoped to a project directory.
+        if let path = conversation.projectPath, !path.isEmpty {
+            let fs = ProjectFS(root: URL(fileURLWithPath: path))
+            tools += [ListDirectoryTool(fs: fs), ReadFileTool(fs: fs),
+                      SearchFilesTool(fs: fs), WriteFileTool(fs: fs), EditFileTool(fs: fs)]
+        }
         session = ChatSession(client: LMStudioClient.shared, context: context,
                               recorder: UsageRecorder(context: context),
                               keychain: keychain,

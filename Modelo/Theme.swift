@@ -393,6 +393,7 @@ struct FilterPill: View {
         Button(action: action) {
             Text(label)
                 .font(Theme.label(9))
+                .lineLimit(1)
                 .tracking(0.8)
                 .textCase(.uppercase)
                 .foregroundStyle(isActive ? Theme.amber : Theme.textDim)
