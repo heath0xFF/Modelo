@@ -974,7 +974,14 @@ struct ChatView: View {
         // While a reply streams, queue the message instead of sending now (§3.3).
         if isStreaming {
             let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !text.isEmpty else { return }
+            guard !text.isEmpty else {
+                // The queue is text-only, so an attachment-only draft can't be queued —
+                // tell the user instead of silently swallowing the Send.
+                if !pendingAttachments.isEmpty {
+                    flash("Finish the current reply before sending attachments.")
+                }
+                return
+            }
             pendingQueue.append(text)
             draft = ""
             flash("Queued — sends when the current reply finishes.")

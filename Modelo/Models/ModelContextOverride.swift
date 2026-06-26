@@ -8,13 +8,13 @@ final class ModelContextOverride {
     var id: UUID = UUID()
     var modelID: String
     var contextLength: Int
-    var serverID: UUID  // foreign key to Server
-    /// Back-reference to the owning server.
+    /// Owning server — the single source of truth. Replaces the old denormalized
+    /// `serverID` (which was only ever written, never read, so it could silently
+    /// diverge from this relationship). Linked via `Server.contextLengthOverrides`.
     @Relationship var server: Server?
-    
-    init(modelID: String, contextLength: Int, serverID: UUID) {
+
+    init(modelID: String, contextLength: Int) {
         self.modelID = modelID
         self.contextLength = contextLength
-        self.serverID = serverID
     }
 }

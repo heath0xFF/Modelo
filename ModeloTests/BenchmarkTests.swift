@@ -33,8 +33,11 @@ final class BenchmarkTests: XCTestCase {
         let endpoint = Endpoint(baseURL: "http://x", kind: .lmStudio, apiKey: nil)
 
         runner.run(endpoint: endpoint, modelID: "m", prompt: "go", requests: 6, concurrency: 3)
-        // Drain until the run finishes (FakeProvider returns immediately).
-        while runner.isRunning { await Task.yield() }
+        // Drain until the run finishes (FakeProvider returns immediately), but bound the
+        // wait so a stuck runner fails the test instead of hanging the whole suite.
+        let deadline = ContinuousClock.now + .seconds(2)
+        while runner.isRunning, ContinuousClock.now < deadline { await Task.yield() }
+        XCTAssertFalse(runner.isRunning, "BenchmarkRunner did not finish before timeout")
 
         let report = try! XCTUnwrap(runner.report)
         XCTAssertEqual(report.total, 6)

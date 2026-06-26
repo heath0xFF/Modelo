@@ -303,7 +303,7 @@ private struct ServerStatsDashboardPanel: View {
                 ForEach(models, id: \.id) { model in
                     LoadedModelRow(model: model)
                 }
-            } else if server.kind == .lmStudio {
+            } else if server.kind.isLocal {
                 NoModelRow()
             } else {
                 Text("Cloud endpoint — no live model snapshot")

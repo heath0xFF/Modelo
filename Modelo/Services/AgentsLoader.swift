@@ -67,7 +67,7 @@ enum AgentsLoader {
                 name = unquote(String(line[r.upperBound...]))
             } else if let r = line.range(of: #"^description:\s*"#, options: .regularExpression) {
                 let head = String(line[r.upperBound...]).trimmingCharacters(in: .whitespaces)
-                if head == ">" || head == "|" || head.isEmpty {
+                if head.isEmpty || head.first == ">" || head.first == "|" {   // also handles >-, |-, >+ etc.
                     // Folded/literal block: gather the indented continuation lines.
                     var parts: [String] = []
                     var j = i + 1

@@ -350,7 +350,7 @@ struct ContentView: View {
         - grep(pattern, path?) — search file contents for a regular expression
         - glob(pattern) — list files matching a glob (e.g. "**/*.swift")
 
-        Start by globbing or reading the project root to orient yourself before answering questions about the code.
+        Start with glob("**/*") or read a specific file to orient yourself before answering questions about the code.
         """
         let convo = Conversation(modelID: pickedModel?.model.id ?? "", serverID: pickedModel?.server.id)
         convo.systemPrompt = systemPrompt

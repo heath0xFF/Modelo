@@ -23,6 +23,7 @@ final class UsageRetentionTests: XCTestCase {
         let now = Date(timeIntervalSince1970: 1_700_000_000)
         ctx.insert(record(daysAgo: 40, now: now))   // pruned
         ctx.insert(record(daysAgo: 31, now: now))   // pruned
+        ctx.insert(record(daysAgo: 30, now: now))   // kept — exactly at the cutoff (timestamp == cutoff, not < )
         ctx.insert(record(daysAgo: 10, now: now))   // kept
         ctx.insert(record(daysAgo: 0,  now: now))   // kept
         try ctx.save()
@@ -30,7 +31,7 @@ final class UsageRetentionTests: XCTestCase {
         UsageRetention.prune(in: ctx, retentionDays: 30, now: now)
 
         let remaining = try ctx.fetch(FetchDescriptor<UsageRecord>())
-        XCTAssertEqual(remaining.count, 2)
+        XCTAssertEqual(remaining.count, 3)
     }
 
     func test_prune_zeroDays_keepsEverything() throws {

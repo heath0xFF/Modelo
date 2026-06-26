@@ -837,6 +837,14 @@ private struct ServerSettingsRow: View {
         .onChange(of: apiKey) { _, newValue in
             keychain.set(newValue.isEmpty ? nil : newValue, account: keychainAccount)
         }
+        .onChange(of: server.kind) { _, _ in
+            // Defense-in-depth: changing the runtime must not carry a stale bearer token
+            // to the new endpoint. Drop any stored key so it can't be silently reused
+            // (see the requiresAuth-flag issue for the fuller fix).
+            keychain.set(nil, account: keychainAccount)
+            apiKey = ""
+            needsAuth = false
+        }
     }
 
     // MARK: - Context Window helpers
@@ -847,10 +855,9 @@ private struct ServerSettingsRow: View {
         let suggestedModelID = availableModels.first ?? ""
         let override = ModelContextOverride(
             modelID: suggestedModelID,
-            contextLength: suggestedModelID.isEmpty ? 32768 : 131072,
-            serverID: server.id
+            contextLength: suggestedModelID.isEmpty ? 32768 : 131072
         )
-        server.contextLengthOverrides.append(override)
+        server.contextLengthOverrides.append(override)   // sets the `server` relationship
         try? modelContext.save()
     }
 
@@ -1006,7 +1013,11 @@ private struct ServerProbeRow: View {
         // Debounce typing so we don't probe on every keystroke; manual Test skips it.
         if debounce { try? await Task.sleep(for: .milliseconds(500)) }
         if Task.isCancelled { return }
-        guard !server.host.trimmingCharacters(in: .whitespaces).isEmpty else { state = .idle; return }
+        guard !server.host.trimmingCharacters(in: .whitespaces).isEmpty else {
+            state = .idle
+            onNeedsAuth(false)   // clear a stale "needs key" reveal when the host is emptied
+            return
+        }
         state = .checking
         let endpoint = Endpoint(server: server, keychain: KeychainStore())
         do {
