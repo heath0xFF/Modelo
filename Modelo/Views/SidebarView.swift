@@ -11,6 +11,7 @@ import SwiftData
 /// Selection is driven manually by writing `route` / `endpointFilter` on tap.
 struct SidebarView: View {
     @Environment(ServerRegistry.self) private var registry
+    @Environment(ReachabilityMonitor.self) private var reachabilityMonitor
     @Environment(\.modelContext) private var context
     @Query(sort: \Server.sortOrder) private var servers: [Server]
     @Query(sort: \Conversation.createdAt, order: .reverse) private var conversations: [Conversation]
@@ -48,7 +49,7 @@ struct SidebarView: View {
 
                 VStack(spacing: 2) {
                     navRow("Models",   icon: "square.grid.2x2",           to: .launcher)
-                    navRow("Status",   icon: "chart.bar",                 to: .status)
+                    navRow("Inference",   icon: "chart.bar",                 to: .status)
                     navRow("Reports",  icon: "chart.line.uptrend.xyaxis", to: .reports)
                     navRow("Settings", icon: "gearshape",                 to: .settings)
                 }
@@ -154,7 +155,7 @@ struct SidebarView: View {
     private var serversSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Eyebrow("Servers")
+                Eyebrow("Inference")
                 Spacer()
                 Text("\(onlineCount) LIVE")
                     .font(.mono(10))
@@ -189,6 +190,17 @@ struct SidebarView: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
+            if status == .offline {
+                Button {
+                    Task { await reachabilityMonitor.checkOnce(server) }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.textMute)
+                }
+                .buttonStyle(.plain)
+                .help("Retry \(server.label)")
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 9)

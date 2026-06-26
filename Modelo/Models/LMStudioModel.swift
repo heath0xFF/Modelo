@@ -77,6 +77,21 @@ struct LMStudioModel: Identifiable, Decodable, Hashable {
         return id
     }
 
+    /// The provider / organization prefix in OpenRouter IDs (`org/model` format).
+    /// Returns nil for LM Studio IDs that have no slash.
+    var providerID: String? {
+        guard let slash = id.firstIndex(of: "/") else { return nil }
+        return String(id[id.startIndex..<slash])
+    }
+
+    /// Unified family grouping key for filter pills.
+    /// OpenRouter models use the provider prefix (e.g. `"anthropic"`, `"openai"`);
+    /// local LM Studio models fall back to architecture family (e.g. `"llama"`, `"qwen"`).
+    var familyTag: String? {
+        if let p = providerID { return p }
+        return displayArch
+    }
+
     /// Back-compat alias used elsewhere in the app (e.g. the model-switcher menu).
     var displayName: String { id }
 

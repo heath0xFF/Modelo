@@ -9,7 +9,6 @@ settings:
     # Automatic signing lets Xcode pick the right identity per machine.
     CODE_SIGN_STYLE: Automatic
     CODE_SIGN_IDENTITY: "Apple Development"
-    DEVELOPMENT_TEAM: WXQ53X7LZ7
 packages:
   MarkdownUI:
     url: https://github.com/gonzalezreal/swift-markdown-ui

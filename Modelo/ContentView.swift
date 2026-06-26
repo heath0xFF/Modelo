@@ -103,10 +103,7 @@ struct ContentView: View {
         case .launcher, nil:
             launcher
         case .status:
-            StatusView(
-                onPin: { server, modelID in Task { await handleModelPin(server: server, modelID: modelID) } },
-                onUnpin: { server, modelID in Task { await handleModelUnpin(server: server, modelID: modelID) } }
-            )
+            ServerStatsView(endpointFilter: $endpointFilter)
         case .reports:
             ReportingView()
         case .settings:

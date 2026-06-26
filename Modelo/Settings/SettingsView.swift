@@ -20,6 +20,7 @@ struct SettingsView: View {
     @Query(sort: \Persona.sortOrder) private var personas: [Persona]
     private let keychain = KeychainStore()
     @AppStorage("showMenuBarIcon") private var showMenuBarIcon: Bool = true
+    @State private var selectedTab: Int = 0
 
     private var lmStudioServers: [Server] { servers.filter { $0.kind == .lmStudio } }
     private var openRouterServers: [Server] { servers.filter { $0.kind == .openRouter } }
@@ -40,131 +41,149 @@ struct SettingsView: View {
 
     @ViewBuilder
     private var tabContent: some View {
-        TabView {
-            // MARK: Servers
-            ScrollView {
-                VStack(spacing: 12) {
-                    ForEach(lmStudioServers) { server in
-                        ServerSettingsRow(server: server) {
-                            context.delete(server)
-                            try? context.save()
+        Group {
+            switch selectedTab {
+            case 1:
+                // MARK: Personas
+                ScrollView {
+                    VStack(spacing: 12) {
+                        ForEach(personas) { persona in
+                            PersonaSettingsRow(persona: persona) {
+                                context.delete(persona)
+                                try? context.save()
+                            }
                         }
+                        addButton("Add Persona", action: addPersona)
                     }
-                    addButton("Add Server", action: addServer)
+                    .padding(24)
                 }
-                .padding(24)
-            }
-            .clipped()
-            .tabItem { Label("Servers", systemImage: "network") }
+                .clipped()
+            case 2:
+                // MARK: Tools
+                ScrollView {
+                    VStack(spacing: 12) {
+                        KeyCard(caption: "Firecrawl API key",
+                                placeholder: "fc-…",
+                                hint: "Enables firecrawl_scrape and firecrawl_search for tool-capable models.",
+                                account: FirecrawlClient.keychainAccount,
+                                keychain: keychain)
+                    }
+                    .padding(24)
+                }
+                .clipped()
+            case 3:
+                // MARK: MCP Servers
+                ScrollView {
+                    VStack(spacing: 12) {
+                        ForEach(mcpManager.configs) { config in
+                            MCPServerSettingsRow(
+                                config: config,
+                                error: mcpManager.connectionErrors[config.id],
+                                onUpdate: { mcpManager.updateConfig($0) },
+                                onDelete: { mcpManager.removeConfig(id: config.id) }
+                            )
+                        }
+                        addButton("Add MCP Server", action: addMCPServer)
+                        Text("MCP servers run as local processes. New tools are available when you start the next chat.")
+                            .font(Theme.metric(10))
+                            .foregroundStyle(Theme.textFaint)
+                            .fixedSize(horizontal: false, vertical: true)
 
-            // MARK: Cloud APIs
-            ScrollView {
-                VStack(spacing: 12) {
-                    ForEach(openRouterServers) { server in
-                        OpenRouterSettingsRow(server: server, keychain: keychain) {
-                            context.delete(server)
-                            try? context.save()
+                        Divider()
+                            .overlay(Theme.line)
+                            .padding(.vertical, 6)
+
+                        MCPDiscoverySection(installed: mcpManager.configs) { entry in
+                            mcpManager.addConfig(entry.makeConfig())
                         }
                     }
-                    addButton("Add OpenRouter", action: addOpenRouterServer)
+                    .padding(24)
+                }
+                .clipped()
+            case 4:
+                // MARK: General
+                ScrollView {
+                    VStack(spacing: 12) {
+                        GeneralToggleRow(
+                            icon: "menubar.rectangle",
+                            title: "Menu Bar Icon",
+                            hint: "Show Modelo in the menu bar for quick access to a lightweight chat.",
+                            isOn: $showMenuBarIcon
+                        )
+                    }
+                    .padding(24)
+                }
+                .clipped()
+            default:
+                // MARK: Inference (0) — all inference endpoints: local LM Studio + remote APIs
+                ScrollView {
+                    VStack(spacing: 12) {
+                        NetworkDiscoverySection { host, port in
+                            let nextOrder = (lmStudioServers.map(\.sortOrder).max() ?? 0) + 1
+                            let server = Server(label: host, host: host, port: port, sortOrder: nextOrder)
+                            context.insert(server)
+                            try? context.save()
+                        }
 
-                    if !cloudServers.isEmpty {
                         Divider()
                             .overlay(Theme.line)
                             .padding(.vertical, 4)
-                    }
 
-                    ForEach(cloudServers) { server in
-                        CloudServerSettingsRow(server: server, keychain: keychain) {
-                            context.delete(server)
-                            try? context.save()
+                        ForEach(lmStudioServers) { server in
+                            ServerSettingsRow(server: server) {
+                                context.delete(server)
+                                try? context.save()
+                            }
                         }
-                    }
-                    addButton("Add Cloud API", action: addCloudServer)
-                }
-                .padding(24)
-            }
-            .clipped()
-            .tabItem { Label("Cloud APIs", systemImage: "globe") }
+                        addButton("Add Server", action: addServer)
 
-            // MARK: Personas
-            ScrollView {
-                VStack(spacing: 12) {
-                    ForEach(personas) { persona in
-                        PersonaSettingsRow(persona: persona) {
-                            context.delete(persona)
-                            try? context.save()
+                        Divider()
+                            .overlay(Theme.line)
+                            .padding(.vertical, 4)
+
+                        ForEach(openRouterServers) { server in
+                            RemoteEndpointSettingsRow(server: server, keychain: keychain) {
+                                context.delete(server)
+                                try? context.save()
+                            }
                         }
+                        addButton("Add OpenRouter", action: addOpenRouterServer)
+
+                        if !cloudServers.isEmpty {
+                            Divider()
+                                .overlay(Theme.line)
+                                .padding(.vertical, 4)
+                        }
+
+                        ForEach(cloudServers) { server in
+                            RemoteEndpointSettingsRow(server: server, keychain: keychain) {
+                                context.delete(server)
+                                try? context.save()
+                            }
+                        }
+                        addButton("Add Cloud API", action: addCloudServer)
                     }
-                    addButton("Add Persona", action: addPersona)
+                    .padding(24)
                 }
-                .padding(24)
+                .clipped()
             }
-            .clipped()
-            .tabItem { Label("Personas", systemImage: "theatermasks") }
-
-            // MARK: Tools
-            ScrollView {
-                VStack(spacing: 12) {
-                    KeyCard(caption: "Firecrawl API key",
-                            placeholder: "fc-…",
-                            hint: "Enables firecrawl_scrape and firecrawl_search for tool-capable models.",
-                            account: FirecrawlClient.keychainAccount,
-                            keychain: keychain)
-                }
-                .padding(24)
-            }
-            .clipped()
-            .tabItem { Label("Tools", systemImage: "wrench.and.screwdriver") }
-
-            // MARK: MCP Servers
-            ScrollView {
-                VStack(spacing: 12) {
-                    ForEach(mcpManager.configs) { config in
-                        MCPServerSettingsRow(
-                            config: config,
-                            error: mcpManager.connectionErrors[config.id],
-                            onUpdate: { mcpManager.updateConfig($0) },
-                            onDelete: { mcpManager.removeConfig(id: config.id) }
-                        )
-                    }
-                    addButton("Add MCP Server", action: addMCPServer)
-                    Text("MCP servers run as local processes. New tools are available when you start the next chat.")
-                        .font(Theme.metric(10))
-                        .foregroundStyle(Theme.textFaint)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    Divider()
-                        .overlay(Theme.line)
-                        .padding(.vertical, 6)
-
-                    MCPDiscoverySection(installed: mcpManager.configs) { entry in
-                        mcpManager.addConfig(entry.makeConfig())
-                    }
-                }
-                .padding(24)
-            }
-            .clipped()
-            .tabItem { Label("MCP Servers", systemImage: "terminal") }
-
-            // MARK: General
-            ScrollView {
-                VStack(spacing: 12) {
-                    GeneralToggleRow(
-                        icon: "menubar.rectangle",
-                        title: "Menu Bar Icon",
-                        hint: "Show Modelo in the menu bar for quick access to a lightweight chat.",
-                        isOn: $showMenuBarIcon
-                    )
-                }
-                .padding(24)
-            }
-            .clipped()
-            .tabItem { Label("General", systemImage: "gearshape") }
         }
         .background(Theme.windowBG)
         .tint(Theme.amber)
         .preferredColorScheme(.dark)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Picker("", selection: $selectedTab) {
+                    Text("Inference").tag(0)
+                    Text("Personas").tag(1)
+                    Text("Tools").tag(2)
+                    Text("MCP Servers").tag(3)
+                    Text("General").tag(4)
+                }
+                .pickerStyle(.segmented)
+                .fixedSize()
+            }
+        }
     }
 
     private func addButton(_ label: String, action: @escaping () -> Void) -> some View {
@@ -398,7 +417,17 @@ private struct ServerSettingsRow: View {
     let onDelete: () -> Void
     @FocusState private var focus: Field?
 
-    private enum Field { case label, host, port }
+    private enum Field { case label, host, port, id }
+
+    private enum RowProbeState {
+        case idle
+        case checking
+        case ok
+        case failed(String)
+    }
+
+    @State private var probeState: RowProbeState = .idle
+    @State private var probeTask: Task<Void, Never>?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -438,6 +467,14 @@ private struct ServerSettingsRow: View {
                     }
                     .fixedSize()
                 }
+                probeBadge
+            }
+
+            FieldGroup(caption: "ID") {
+                TextField("e.g. via Tailscale", text: $server.connectionID)
+                    .textFieldStyle(.plain)
+                    .focused($focus, equals: .id)
+                    .fieldChrome(focused: focus == .id)
             }
         }
         .padding(16)
@@ -449,13 +486,95 @@ private struct ServerSettingsRow: View {
                 server.host = Server.normalizedHost(server.host)
             }
         }
+        .onChange(of: server.host) { _, _ in
+            if server.kind == .lmStudio { scheduleProbe() }
+        }
+        .onChange(of: server.port) { _, _ in
+            if server.kind == .lmStudio { scheduleProbe() }
+        }
+        .onAppear {
+            if server.kind == .lmStudio,
+               !server.host.trimmingCharacters(in: .whitespaces).isEmpty {
+                scheduleProbe(delay: .seconds(0.5))
+            }
+        }
+        .onDisappear { probeTask?.cancel() }
+    }
+
+    // MARK: - Probe badge
+
+    @ViewBuilder
+    private var probeBadge: some View {
+        if case .checking = probeState {
+            HStack(spacing: 6) {
+                ProgressView()
+                    .progressViewStyle(.circular)
+                    .controlSize(.mini)
+                Text("Checking…")
+                    .font(Theme.metric(10))
+                    .foregroundStyle(Theme.textFaint)
+            }
+        } else if case .ok = probeState {
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(Theme.green)
+                    .frame(width: 5, height: 5)
+                Text("Reachable")
+                    .font(Theme.metric(10))
+                    .foregroundStyle(Theme.green)
+            }
+        } else if case .failed(let msg) = probeState {
+            HStack(alignment: .top, spacing: 5) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 9))
+                    .foregroundStyle(Theme.Palette.alert)
+                    .padding(.top, 1)
+                Text(msg)
+                    .font(Theme.metric(10))
+                    .foregroundStyle(Theme.Palette.alert)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    // MARK: - Probe logic
+
+    /// Debounces host/port changes before firing a connection probe so
+    /// the server isn't hit on every keystroke.
+    private func scheduleProbe(delay: Duration = .seconds(1)) {
+        probeTask?.cancel()
+        probeState = .idle
+        guard !server.host.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        probeTask = Task { @MainActor in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled else { return }
+            probeState = .checking
+            let host = Server.normalizedHost(server.host)
+            let port = server.port
+            let endpoint = Endpoint(baseURL: "http://\(host):\(port)", kind: .lmStudio, apiKey: nil)
+            let result = await LMStudioClient.shared.probeDetailed(endpoint: endpoint, timeout: 4.0)
+            switch result {
+            case .reachable:
+                probeState = .ok
+            case .hostNotFound:
+                probeState = .failed("Can't resolve hostname. For a local Mac try \"hostname.local\".")
+            case .unreachable:
+                probeState = .failed("Host reachable but LM Studio isn't on port \(port). Is the server running?")
+            case .timeout:
+                probeState = .failed("Timed out — host may be offline or on a different network.")
+            case .invalidURL:
+                probeState = .idle
+            }
+        }
     }
 }
 
-// MARK: - OpenRouter server row
+// MARK: - Remote inference endpoint row
 
-/// Dedicated OpenRouter endpoint: the base URL is hardcoded; the user only supplies their API key.
-private struct OpenRouterSettingsRow: View {
+/// Unified row for remote inference endpoints (OpenRouter and custom cloud APIs).
+/// OpenRouter shows its base URL as read-only text; cloud API endpoints expose an
+/// editable URL field. Both share the same name, ID, and API key chrome.
+private struct RemoteEndpointSettingsRow: View {
     @Bindable var server: Server
     let keychain: KeychainStore
     let onDelete: () -> Void
@@ -464,19 +583,27 @@ private struct OpenRouterSettingsRow: View {
     @State private var isKeyRevealed = false
     @FocusState private var focus: Field?
 
-    private enum Field { case label, key }
+    private enum Field { case label, url, key, id }
     private var keychainAccount: String { Endpoint.keychainAccount(for: server) }
+
+    private var chipLabel: String {
+        server.kind == .openRouter ? "openrouter" : "cloud api"
+    }
+
+    private var keyPlaceholder: String {
+        server.kind == .openRouter ? "sk-or-…" : "sk-…"
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 8) {
-                TextField("Server name", text: $server.label)
+                TextField("Endpoint name", text: $server.label)
                     .textFieldStyle(.plain)
                     .font(Theme.mono(13, weight: .semibold))
                     .foregroundStyle(Theme.textHi)
                     .focused($focus, equals: .label)
                 Spacer(minLength: 8)
-                Chip(text: "openrouter")
+                Chip(text: chipLabel)
                 Button(action: onDelete) {
                     Image(systemName: "trash")
                         .font(.system(size: 11))
@@ -486,97 +613,33 @@ private struct OpenRouterSettingsRow: View {
                 .help("Remove this endpoint")
             }
 
-            Text(Endpoint.openRouterBaseURL)
-                .font(Theme.metric(11))
-                .foregroundStyle(Theme.textFaint)
-
-            FieldGroup(caption: "API Key") {
-                HStack(spacing: 0) {
-                    Group {
-                        if isKeyRevealed {
-                            TextField("sk-or-…", text: $apiKey)
-                        } else {
-                            SecureField("sk-or-…", text: $apiKey)
-                        }
-                    }
-                    .textFieldStyle(.plain)
-                    .focused($focus, equals: .key)
-
-                    Button { isKeyRevealed.toggle() } label: {
-                        Image(systemName: isKeyRevealed ? "eye.slash" : "eye")
-                            .font(.system(size: 10))
-                            .foregroundStyle(Theme.textLo)
-                            .padding(.trailing, 4)
-                    }
-                    .buttonStyle(.plain)
-                    .help(isKeyRevealed ? "Hide key" : "Reveal key")
+            if server.kind == .openRouter {
+                Text(Endpoint.openRouterBaseURL)
+                    .font(Theme.metric(11))
+                    .foregroundStyle(Theme.textFaint)
+            } else {
+                FieldGroup(caption: "Base URL") {
+                    TextField("https://api.together.xyz/v1", text: $server.host)
+                        .textFieldStyle(.plain)
+                        .focused($focus, equals: .url)
+                        .fieldChrome(focused: focus == .url)
                 }
-                .fieldChrome(focused: focus == .key)
             }
 
-            Text("Bearer token — stored in your Keychain. Models load once a valid key is set.")
-                .font(Theme.metric(10))
-                .foregroundStyle(Theme.textFaint)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(16)
-        .panel(Theme.popoverBG)
-        .onAppear { apiKey = keychain.get(account: keychainAccount) ?? "" }
-        .onChange(of: apiKey) { _, newValue in
-            keychain.set(newValue.isEmpty ? nil : newValue, account: keychainAccount)
-        }
-    }
-}
-
-// MARK: - Cloud server row
-
-/// One cloud API endpoint: a user-supplied base URL + a bearer token from Keychain.
-/// The `host` field on the `Server` model stores the full base URL for cloud kind.
-private struct CloudServerSettingsRow: View {
-    @Bindable var server: Server
-    let keychain: KeychainStore
-    let onDelete: () -> Void
-
-    @State private var apiKey = ""
-    @State private var isKeyRevealed = false
-    @FocusState private var focus: Field?
-
-    private enum Field { case label, url, key }
-    private var keychainAccount: String { Endpoint.keychainAccount(for: server) }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 8) {
-                TextField("Server name", text: $server.label)
+            FieldGroup(caption: "ID") {
+                TextField("e.g. via API", text: $server.connectionID)
                     .textFieldStyle(.plain)
-                    .font(Theme.mono(13, weight: .semibold))
-                    .foregroundStyle(Theme.textHi)
-                    .focused($focus, equals: .label)
-                Spacer(minLength: 8)
-                Chip(text: "cloud api")
-                Button(action: onDelete) {
-                    Image(systemName: "trash")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Theme.Palette.alert.opacity(0.7))
-                }
-                .buttonStyle(.plain)
-                .help("Remove this endpoint")
-            }
-
-            FieldGroup(caption: "Base URL") {
-                TextField("https://api.together.xyz/v1", text: $server.host)
-                    .textFieldStyle(.plain)
-                    .focused($focus, equals: .url)
-                    .fieldChrome(focused: focus == .url)
+                    .focused($focus, equals: .id)
+                    .fieldChrome(focused: focus == .id)
             }
 
             FieldGroup(caption: "API Key") {
                 HStack(spacing: 0) {
                     Group {
                         if isKeyRevealed {
-                            TextField("sk-…", text: $apiKey)
+                            TextField(keyPlaceholder, text: $apiKey)
                         } else {
-                            SecureField("sk-…", text: $apiKey)
+                            SecureField(keyPlaceholder, text: $apiKey)
                         }
                     }
                     .textFieldStyle(.plain)
@@ -1058,5 +1121,103 @@ private struct CatalogEntryRow: View {
         case .needsPath: return "folder"
         case .needsKey:  return "key.fill"
         }
+    }
+}
+
+// MARK: - Network discovery
+
+/// Scans the local network for LM Studio instances and lets the user add
+/// any found host in one tap. Probes localhost plus the machine's /24 subnet(s).
+private struct NetworkDiscoverySection: View {
+    let onAdd: (String, Int) -> Void
+
+    @State private var scanner = NetworkScanner()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Eyebrow("Discover on this network")
+                Spacer()
+                scanControl
+            }
+
+            statusLine
+
+            ForEach(scanner.found) { host in
+                DiscoveredHostRow(host: host) {
+                    onAdd(host.host, host.port)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var scanControl: some View {
+        if case .scanning(let progress) = scanner.state {
+            HStack(spacing: 8) {
+                ProgressView(value: progress)
+                    .progressViewStyle(.linear)
+                    .frame(width: 80)
+                    .tint(Theme.amber)
+                Button("Cancel") { scanner.cancel() }
+                    .font(Theme.label(10))
+                    .foregroundStyle(Theme.textLo)
+                    .buttonStyle(.plain)
+            }
+        } else {
+            Button(scanner.state == .done ? "Scan Again" : "Scan") {
+                scanner.scan()
+            }
+            .font(Theme.label(11))
+            .foregroundStyle(Theme.amber)
+            .buttonStyle(.plain)
+        }
+    }
+
+    @ViewBuilder
+    private var statusLine: some View {
+        if case .scanning = scanner.state, scanner.found.isEmpty {
+            Text("Scanning local network for port 1234…")
+                .font(Theme.metric(11))
+                .foregroundStyle(Theme.textFaint)
+        } else if scanner.state == .done, scanner.found.isEmpty {
+            Text("No LM Studio instances found. Make sure the local server is running in LM Studio.")
+                .font(Theme.metric(11))
+                .foregroundStyle(Theme.textFaint)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+/// One host found during a network scan — shows address and a one-tap Add button.
+private struct DiscoveredHostRow: View {
+    let host: DiscoveredHost
+    let onAdd: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Circle()
+                .fill(Theme.green)
+                .frame(width: 6, height: 6)
+            Text(verbatim: "\(host.host):\(host.port)")
+                .font(Theme.mono(12, weight: .semibold))
+                .foregroundStyle(Theme.textHi)
+            Spacer()
+            Button(action: onAdd) {
+                HStack(spacing: 5) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 10, weight: .semibold))
+                    Text("Add")
+                        .font(Theme.label(11))
+                }
+                .foregroundStyle(Theme.amber)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .panel(Theme.fillHi, radius: 8, stroke: Theme.amber.opacity(0.3))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(14)
+        .panel(Theme.popoverBG)
     }
 }

@@ -18,6 +18,8 @@ final class Server {
     var kindRaw: String = ServerKind.lmStudio.rawValue
     /// DEPRECATED: never used; secrets now live in Keychain (`KeychainStore`). Kept to avoid a migration.
     var apiKey: String?
+    /// User-supplied subtitle shown under the server name in the sidebar. Empty means auto-detect.
+    var connectionID: String = ""
 
     var kind: ServerKind {
         get { ServerKind(rawValue: kindRaw) ?? .lmStudio }
@@ -59,6 +61,9 @@ final class Server {
 
     init(label: String, host: String, port: Int = 1234, sortOrder: Int = 0,
          kind: ServerKind = .lmStudio) {
+        // Explicit assignment avoids the SwiftData compile-time-constant UUID bug
+        // (var id: UUID = UUID() bakes the same UUID for every row if not set here).
+        self.id = UUID()
         self.label = label
         self.host = host
         self.port = port

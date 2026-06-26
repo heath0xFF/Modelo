@@ -17,7 +17,9 @@ struct ServerRow: View {
     }
 
     /// Human-readable subtitle for the server's connection method.
+    /// Uses the user-supplied ID when set; otherwise auto-detects from host/kind.
     private var subtitle: String {
+        if !server.connectionID.isEmpty { return server.connectionID }
         switch server.kind {
         case .openRouter:
             return "via API"

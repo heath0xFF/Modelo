@@ -1,5 +1,15 @@
 import Foundation
 
+/// Categorizes the failure mode of a reachability probe so the UI can surface
+/// an actionable hint rather than a generic "offline" indicator.
+enum ProbeResult {
+    case reachable
+    case hostNotFound    // DNS resolution failed
+    case unreachable     // connection refused or non-2xx (host up, LM Studio not running)
+    case timeout
+    case invalidURL
+}
+
 /// HTTP client for LM Studio's OpenAI-compatible API. The `URLSession` is
 /// injected so tests can stub the network; production uses the default below.
 final class LMStudioClient: ChatProvider {
@@ -90,6 +100,33 @@ final class LMStudioClient: ChatProvider {
         guard let (_, response) = try? await session.data(for: request),
               let http = response as? HTTPURLResponse else { return false }
         return (200..<400).contains(http.statusCode)
+    }
+
+    /// Like `probeReachable` but returns a `ProbeResult` identifying the failure
+    /// mode so the settings UI can show an actionable hint (e.g. "hostname not
+    /// found" versus "LM Studio not running on this port").
+    func probeDetailed(endpoint: Endpoint, timeout: TimeInterval = 4) async -> ProbeResult {
+        let path = endpoint.kind != .lmStudio ? "/models" : "/v1/models"
+        guard let url = URL(string: "\(endpoint.baseURL)\(path)") else { return .invalidURL }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = timeout
+        applyAuth(&request, endpoint: endpoint)
+        do {
+            let (_, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse else { return .unreachable }
+            return (200..<400).contains(http.statusCode) ? .reachable : .unreachable
+        } catch let urlError as URLError {
+            switch urlError.code {
+            case .cannotFindHost, .dnsLookupFailed:
+                return .hostNotFound
+            case .timedOut:
+                return .timeout
+            default:
+                return .unreachable
+            }
+        } catch {
+            return .unreachable
+        }
     }
 
     // MARK: Model load / unload (LM Studio only)

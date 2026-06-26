@@ -57,11 +57,11 @@ struct ModelBrowserView: View {
             if !providers.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
-                        ProviderPill(label: "All", isActive: selectedProvider == nil) {
+                        FilterPill(label: "All", isActive: selectedProvider == nil) {
                             selectedProvider = nil
                         }
                         ForEach(providers, id: \.self) { provider in
-                            ProviderPill(
+                            FilterPill(
                                 label: providerDisplayName(provider),
                                 isActive: selectedProvider == provider
                             ) {
@@ -112,36 +112,4 @@ struct ModelBrowserView: View {
     }
 }
 
-/// Single-select filter pill for the provider strip. Active state highlights amber,
-/// matching the `ChipToggleStyle` pattern used elsewhere.
-private struct ProviderPill: View {
-    let label: String
-    let isActive: Bool
-    let action: () -> Void
-    @State private var hovering = false
 
-    var body: some View {
-        Button(action: action) {
-            Text(label)
-                .font(Theme.label(9))
-                .tracking(0.8)
-                .textCase(.uppercase)
-                .foregroundStyle(isActive ? Theme.amber : Theme.textDim)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(
-                    isActive ? Theme.amberFill : (hovering ? Theme.fillHi : Color.clear),
-                    in: Capsule()
-                )
-                .overlay(
-                    Capsule().strokeBorder(
-                        isActive ? Theme.amberBorder : Theme.line,
-                        lineWidth: 1
-                    )
-                )
-                .animation(.easeOut(duration: 0.12), value: isActive)
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering = $0 }
-    }
-}

@@ -18,6 +18,7 @@ struct StatusView: View {
 
     @Environment(ServerRegistry.self) private var registry
     @Environment(ServerMonitor.self) private var monitor
+    @Environment(ReachabilityMonitor.self) private var reachabilityMonitor
     @Query(sort: \Server.sortOrder) private var servers: [Server]
 
     private var liveCount: Int { servers.filter { registry.isOnline($0) }.count }
@@ -54,6 +55,17 @@ struct StatusView: View {
                 .font(.mono(11))
                 .foregroundStyle(Theme.textDim)
             Spacer()
+            Button {
+                for server in servers {
+                    Task { await reachabilityMonitor.checkOnce(server) }
+                }
+            } label: {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.textDim)
+            }
+            .buttonStyle(.plain)
+            .help("Refresh all servers")
         }
     }
 }
@@ -66,6 +78,7 @@ private struct CompactServerCard: View {
     let latency: Double?
     let snapshot: ModelSnapshot?
     @Query private var records: [UsageRecord]
+    @Environment(ReachabilityMonitor.self) private var reachabilityMonitor
 
     init(server: Server, status: ServerStatus, latency: Double?, snapshot: ModelSnapshot?) {
         self.server = server
@@ -135,9 +148,19 @@ private struct CompactServerCard: View {
                 .font(.mono(9)).tracking(1)
                 .foregroundStyle(Theme.green)
         case .offline:
-            Text("OFFLINE")
-                .font(.mono(9)).tracking(1)
-                .foregroundStyle(Theme.textFaint)
+            Button {
+                Task { await reachabilityMonitor.checkOnce(server) }
+            } label: {
+                HStack(spacing: 3) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 8))
+                    Text("RETRY")
+                        .font(.mono(9)).tracking(1)
+                }
+                .foregroundStyle(Theme.textDim)
+            }
+            .buttonStyle(.plain)
+            .help("Retry connection")
         case .unknown:
             Text("PROBING")
                 .font(.mono(9)).tracking(1)

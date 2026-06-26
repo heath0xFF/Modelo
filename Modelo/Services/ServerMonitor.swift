@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 
 /// A point-in-time view of the models an LM Studio server currently has loaded.
 struct ModelSnapshot: Equatable {
@@ -13,9 +14,9 @@ struct ModelSnapshot: Equatable {
 @Observable
 @MainActor
 final class ServerMonitor {
-    private(set) var snapshots: [UUID: ModelSnapshot] = [:]
+    private(set) var snapshots: [PersistentIdentifier: ModelSnapshot] = [:]
 
-    private var loops: [UUID: Task<Void, Never>] = [:]
+    private var loops: [PersistentIdentifier: Task<Void, Never>] = [:]
     private let client: any ChatProvider
 
     init(client: any ChatProvider = LMStudioClient.shared) {
@@ -23,20 +24,20 @@ final class ServerMonitor {
     }
 
     /// The loaded model snapshot for `server`, or nil if none is known yet.
-    func snapshot(for server: Server) -> ModelSnapshot? { snapshots[server.id] }
+    func snapshot(for server: Server) -> ModelSnapshot? { snapshots[server.persistentModelID] }
 
     /// Starts a 3-second poll loop per LM Studio server. Restarts cleanly if called again.
     func start(servers: [Server], registry: ServerRegistry) {
         stop()
         for server in servers where server.kind == .lmStudio {
-            loops[server.id] = Task { [weak self] in
+            loops[server.persistentModelID] = Task { [weak self] in
                 guard let self else { return }
                 while !Task.isCancelled {
                     if registry.isOnline(server) {
                         await self.poll(server)
                     } else {
                         // Clear stale snapshot so offline servers don't show models as loaded.
-                        snapshots.removeValue(forKey: server.id)
+                        snapshots.removeValue(forKey: server.persistentModelID)
                     }
                     try? await Task.sleep(for: .seconds(3))
                 }
@@ -63,6 +64,6 @@ final class ServerMonitor {
         let anyHasState = models.contains { $0.state != nil }
         let toStore = (!anyHasState && loaded.isEmpty) ? [models.first].compactMap { $0 } : loaded
         // Always write the snapshot — even when empty — so unloaded models are cleared promptly.
-        snapshots[server.id] = ModelSnapshot(models: toStore, polledAt: Date())
+        snapshots[server.persistentModelID] = ModelSnapshot(models: toStore, polledAt: Date())
     }
 }

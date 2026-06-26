@@ -61,11 +61,15 @@ struct ModeloApp: App {
                 .environment(serverMonitor)
                 .environment(mcpManager)
                 .environment(favoritesStore)
+                .environment(reachabilityMonitor)
                 .task { await startMonitoring() }
                 .task { mcpManager.startAll() }
                 .onAppear {
                     DispatchQueue.main.async {
-                        NSApp.keyWindow?.center()
+                        if let window = NSApp.keyWindow {
+                            window.center()
+                            window.titlebarAppearsTransparent = true
+                        }
                     }
                 }
         }
