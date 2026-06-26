@@ -6,9 +6,12 @@ import WebKit
 struct ArtifactWebView: NSViewRepresentable {
     let html: String
 
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
     func makeNSView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
         let webView = WKWebView(frame: .zero, configuration: config)
+        webView.navigationDelegate = context.coordinator
         // Blend with the panel background instead of painting white.
         webView.setValue(false, forKey: "drawsBackground")
         webView.allowsBackForwardNavigationGestures = false
@@ -17,6 +20,21 @@ struct ArtifactWebView: NSViewRepresentable {
 
     func updateNSView(_ webView: WKWebView, context: Context) {
         webView.loadHTMLString(html, baseURL: nil)
+    }
+
+    /// Keeps model-generated previews from navigating out to the network: the initial
+    /// in-memory document loads, but any attempt to follow a remote (http/https) link or
+    /// redirect is cancelled, so the sandbox can't be used to exfiltrate or phone home.
+    final class Coordinator: NSObject, WKNavigationDelegate {
+        func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
+                     decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+            if let scheme = navigationAction.request.url?.scheme?.lowercased(),
+               scheme == "http" || scheme == "https" {
+                decisionHandler(.cancel)
+            } else {
+                decisionHandler(.allow)
+            }
+        }
     }
 }
 
@@ -43,6 +61,7 @@ enum ArtifactHTML {
             : ""
         return """
         <!doctype html><html><head><meta charset="utf-8">
+        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <style>
           html,body{margin:0;background:transparent;\(layout)}
@@ -53,18 +72,31 @@ enum ArtifactHTML {
     }
 
     private static func mermaid(_ source: String, dark: Bool) -> String {
-        let js = (try? Bundle.main.url(forResource: "mermaid.min", withExtension: "js")
-            .map { try String(contentsOf: $0, encoding: .utf8) }) ?? nil
-        let script = js.map { "<script>\($0)</script>" }
-            ?? "<script src=\"https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js\"></script>"
+        // Fail closed: render only with the bundled engine. Never fall back to a remote
+        // CDN — that would execute third-party JS and leak a network request from model
+        // content if the resource were ever missing.
+        guard let url = Bundle.main.url(forResource: "mermaid.min", withExtension: "js"),
+              let js = try? String(contentsOf: url, encoding: .utf8) else {
+            return wrap(body: "<p>Mermaid renderer unavailable.</p>", dark: dark, center: true)
+        }
+        // Escape the diagram source so it can't inject markup/script; Mermaid reads it
+        // back as plain text. `securityLevel:'strict'` also sanitizes labels (was 'loose').
+        let safeSource = escapeHTML(source)
         return """
         <!doctype html><html><head><meta charset="utf-8">
         <style>html,body{margin:0;background:transparent;display:flex;justify-content:center}
         .mermaid{max-width:100%}</style></head>
-        <body><pre class="mermaid">\(source)</pre>
-        \(script)
-        <script>mermaid.initialize({startOnLoad:true, theme:'\(dark ? "dark" : "default")', securityLevel:'loose'});</script>
+        <body><pre class="mermaid">\(safeSource)</pre>
+        <script>\(js)</script>
+        <script>mermaid.initialize({startOnLoad:true, theme:'\(dark ? "dark" : "default")', securityLevel:'strict'});</script>
         </body></html>
         """
+    }
+
+    /// Minimal HTML-entity escaping for untrusted text interpolated into a document.
+    private static func escapeHTML(_ s: String) -> String {
+        s.replacingOccurrences(of: "&", with: "&amp;")
+         .replacingOccurrences(of: "<", with: "&lt;")
+         .replacingOccurrences(of: ">", with: "&gt;")
     }
 }

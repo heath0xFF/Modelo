@@ -69,7 +69,7 @@ enum FSToolError: LocalizedError {
 struct WorkspaceScope: Sendable {
     let root: URL
 
-    init(root: URL) { self.root = root.standardizedFileURL }
+    init(root: URL) { self.root = root.standardizedFileURL.resolvingSymlinksInPath() }
 
     /// Resolve a model-supplied path (absolute or relative to root) to a URL proven to
     /// sit inside the workspace. Works for not-yet-existing files (writes).
@@ -77,12 +77,32 @@ struct WorkspaceScope: Sendable {
         let trimmed = path.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { throw FSToolError.badArguments("empty path") }
         let raw = trimmed.hasPrefix("/") ? URL(filePath: trimmed) : root.appending(path: trimmed)
-        let resolved = raw.standardizedFileURL
+        // Resolve symlinks before the boundary check — a link *inside* the workspace can
+        // otherwise point outside it and smuggle reads/writes past the guard. For a
+        // not-yet-existing target (writes), resolve the nearest existing ancestor and
+        // re-attach the missing tail.
+        let resolved = Self.resolvingSymlinks(raw.standardizedFileURL)
         let rootPath = root.path
         guard resolved.path == rootPath || resolved.path.hasPrefix(rootPath + "/") else {
             throw FSToolError.outsideWorkspace(path)
         }
         return resolved
+    }
+
+    /// Symlink-resolve `url`, tolerating a path that doesn't exist yet by resolving the
+    /// deepest existing ancestor and re-appending the remaining components.
+    private static func resolvingSymlinks(_ url: URL) -> URL {
+        let fm = FileManager.default
+        if fm.fileExists(atPath: url.path) { return url.resolvingSymlinksInPath() }
+        var missing: [String] = []
+        var dir = url
+        while dir.path != "/" && !fm.fileExists(atPath: dir.path) {
+            missing.append(dir.lastPathComponent)
+            dir = dir.deletingLastPathComponent()
+        }
+        var base = dir.resolvingSymlinksInPath()
+        for comp in missing.reversed() { base.append(path: comp) }
+        return base.standardizedFileURL
     }
 
     /// A workspace-relative display path for results/previews.
@@ -188,6 +208,11 @@ struct EditFileTool: Tool {
 
     /// Returns the edited file contents, or throws an actionable error.
     private func apply(_ args: Args, to text: String) throws -> String {
+        // An empty old_string would "match" between every character and produce a
+        // surprising mass edit; reject it with an actionable error instead.
+        guard !args.old_string.isEmpty else {
+            throw FSToolError.badArguments("old_string must not be empty")
+        }
         let count = text.components(separatedBy: args.old_string).count - 1
         if count == 0 { throw FSToolError.stringNotFound }
         if count > 1 && args.replace_all != true { throw FSToolError.stringNotUnique(count) }
@@ -399,7 +424,13 @@ enum Shell {
                 return
             }
             DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
-                if proc.isRunning { proc.terminate() }
+                guard proc.isRunning else { return }
+                proc.terminate()   // SIGTERM
+                // Escalate if the command ignores SIGTERM, so the continuation always
+                // resumes (terminationHandler fires once the process actually dies).
+                DispatchQueue.global().asyncAfter(deadline: .now() + 2) {
+                    if proc.isRunning { kill(proc.processIdentifier, SIGKILL) }
+                }
             }
         }
     }

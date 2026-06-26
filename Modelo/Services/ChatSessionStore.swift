@@ -27,6 +27,10 @@ final class ChatSessionStore {
 
     /// Records the in-flight turn for a conversation, replacing any prior one.
     func setTask(_ task: Task<Void, Never>?, for id: PersistentIdentifier) {
+        // Cancel any prior in-flight turn before replacing it, preserving the
+        // "one in-flight turn per conversation" invariant (a resend/regenerate
+        // otherwise leaves two turns writing into the same conversation).
+        if task != nil { tasks[id]?.cancel() }
         tasks[id] = task
     }
 

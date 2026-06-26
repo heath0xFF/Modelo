@@ -9,7 +9,9 @@
 //! LPDDR5X. So power/temp/util come from nvidia-smi, and VRAM (used/total)
 //! comes from /proc/meminfo.
 //!
-//! Usage:  modelo-tap [--port 9099] [--bind 0.0.0.0]
+//! Usage:  modelo-tap [--port 9099] [--bind 127.0.0.1]
+//! Binds loopback by default; pass `--bind 0.0.0.0` to expose it on the LAN
+//! (e.g. so a Modelo machine on another host can reach it).
 
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -17,7 +19,7 @@ use std::process::Command;
 
 fn main() {
     let mut port: u16 = 9099;
-    let mut bind = "0.0.0.0".to_string();
+    let mut bind = "127.0.0.1".to_string();   // loopback by default; LAN exposure is opt-in via --bind 0.0.0.0
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -32,7 +34,7 @@ fn main() {
                 }
             }
             "-h" | "--help" => {
-                println!("modelo-tap [--port 9099] [--bind 0.0.0.0]");
+                println!("modelo-tap [--port 9099] [--bind 127.0.0.1]  (--bind 0.0.0.0 to expose on the LAN)");
                 return;
             }
             _ => {}
@@ -61,6 +63,11 @@ fn main() {
 }
 
 fn handle(mut stream: TcpStream) -> std::io::Result<()> {
+    use std::time::Duration;
+    // Bound each connection so one idle/slow client can't stall the single-threaded
+    // accept loop and starve telemetry for everyone else.
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
+    let _ = stream.set_write_timeout(Some(Duration::from_secs(5)));
     let mut buf = [0u8; 1024];
     let n = stream.read(&mut buf)?;
     let req = String::from_utf8_lossy(&buf[..n]);

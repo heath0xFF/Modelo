@@ -24,7 +24,7 @@ enum PrometheusParser {
             guard let lastSpace = line.lastIndex(of: " ") else { continue }
             let metricPart = line[..<lastSpace].trimmingCharacters(in: .whitespaces)
             let valuePart = line[line.index(after: lastSpace)...].trimmingCharacters(in: .whitespaces)
-            guard let value = Double(valuePart) else { continue }   // skip NaN/Inf/garbage
+            guard let value = Double(valuePart), value.isFinite else { continue }   // skip NaN/Inf/garbage (Double() accepts "nan"/"inf")
 
             let name: String
             let labels: [String: String]

@@ -19,11 +19,12 @@ enum BranchingMigration {
     static func runIfNeeded(in context: ModelContext,
                             defaults: UserDefaults = .standard) {
         guard !defaults.bool(forKey: flagKey) else { return }
-        backfill(in: context)
-        // Only mark the migration done once it has actually persisted; otherwise a
-        // failed save would skip the backfill forever (conversations would still work
+        // Only mark the migration done once the backfill has actually run *and* persisted.
+        // A failed fetch or save must leave the flag unset so it retries on the next launch;
+        // otherwise the backfill would be skipped forever (conversations would still work
         // via activePath's createdAt fallback, but never gain real tree links).
         do {
+            try backfill(in: context)
             try context.save()
             defaults.set(true, forKey: flagKey)
         } catch {
@@ -33,8 +34,8 @@ enum BranchingMigration {
 
     /// The actual chaining pass, factored out so tests can exercise it directly
     /// without touching `UserDefaults`.
-    static func backfill(in context: ModelContext) {
-        let conversations = (try? context.fetch(FetchDescriptor<Conversation>())) ?? []
+    static func backfill(in context: ModelContext) throws {
+        let conversations = try context.fetch(FetchDescriptor<Conversation>())
         for convo in conversations {
             // Already linked (a re-run, or a conversation born after branching).
             if convo.messages.contains(where: { $0.parent != nil }) { continue }

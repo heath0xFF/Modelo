@@ -155,7 +155,7 @@ final class ConversationBranchingTests: XCTestCase {
         [m1, m2, m3].forEach { convo.messages.append($0) }   // legacy: no links
         try ctx.save()
 
-        BranchingMigration.backfill(in: ctx)
+        try BranchingMigration.backfill(in: ctx)
         try ctx.save()
 
         XCTAssertNil(m1.parent)
@@ -175,7 +175,7 @@ final class ConversationBranchingTests: XCTestCase {
         convo.appendToPath(a)
         try ctx.save()
 
-        BranchingMigration.backfill(in: ctx)
+        try BranchingMigration.backfill(in: ctx)
 
         XCTAssertTrue(a.parent === u)   // unchanged
         XCTAssertNil(u.parent)

@@ -85,7 +85,12 @@ final class Conversation {
     /// Applies a preset (§1.4b): its sampling overrides replace this chat's, and a
     /// non-empty system prompt overwrites the chat's.
     func apply(_ preset: Preset) {
-        if let prompt = preset.systemPrompt { systemPrompt = prompt }
+        // Only a *non-empty* prompt overwrites the chat's — an empty preset prompt must
+        // not silently clear an existing one (honors the doc contract above).
+        if let prompt = preset.systemPrompt?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !prompt.isEmpty {
+            systemPrompt = prompt
+        }
         samplingOverride = preset.sampling
     }
 
@@ -148,8 +153,11 @@ final class Conversation {
     /// the exact leaf matters) always sets `activeLeaf` from a saved, permanent-id row.
     func activePath() -> [Message] {
         let ordered = messages.sorted { $0.createdAt < $1.createdAt }
-        let hasTree = messages.contains { $0.parent != nil }
-        guard hasTree, let leaf = activeLeaf ?? ordered.last else { return ordered }
+        // `activeLeafData != nil` also counts: a conversation can branch at the root
+        // (all siblings have parent == nil), so a parent-link check alone would miss
+        // the selection and return every root sibling instead of the chosen path.
+        let hasBranchingState = activeLeafData != nil || messages.contains { $0.parent != nil }
+        guard hasBranchingState, let leaf = activeLeaf ?? ordered.last else { return ordered }
         var chain: [Message] = []
         var node: Message? = leaf
         while let n = node {

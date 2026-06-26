@@ -53,14 +53,31 @@ final class ChatSession {
         pending?.resume(decision)
     }
 
+    /// Deny and clear a pending approval (e.g. when the turn is cancelled mid-prompt),
+    /// so the suspended `requestApproval` continuation always resumes.
+    private func cancelPendingApproval() {
+        let pending = pendingApproval
+        pendingApproval = nil
+        pending?.resume(.deny)
+    }
+
     /// Suspend until the user approves/denies a mutating tool call. Returns whether to
     /// proceed, and remembers session-wide approvals so we don't ask again.
     private func requestApproval(toolName: String, preview: ToolApprovalPreview) async -> Bool {
         if sessionApprovedTools.contains(toolName) { return true }
-        let decision = await withCheckedContinuation { (cont: CheckedContinuation<ApprovalDecision, Never>) in
-            pendingApproval = PendingApproval(toolName: toolName, preview: preview) { cont.resume(returning: $0) }
+        let decision = await withTaskCancellationHandler {
+            await withCheckedContinuation { (cont: CheckedContinuation<ApprovalDecision, Never>) in
+                pendingApproval = PendingApproval(toolName: toolName, preview: preview) { cont.resume(returning: $0) }
+            }
+        } onCancel: {
+            // A cancelled turn won't resume the continuation on its own — deny the pending
+            // approval so streaming can't wedge behind an abandoned continuation.
+            Task { @MainActor in self.cancelPendingApproval() }
         }
-        if decision == .session { sessionApprovedTools.insert(toolName) }
+        // "Approve for session" is deliberately NOT honored for the shell tool: one grant
+        // must never authorize every later command. Writes/edits stay workspace-scoped,
+        // so a session grant for those is acceptable.
+        if decision == .session && preview.kind != .shell { sessionApprovedTools.insert(toolName) }
         return decision != .deny
     }
 

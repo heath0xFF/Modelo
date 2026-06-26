@@ -29,7 +29,9 @@ enum ConversationExporter {
         let fm = FileManager.default
         guard let dir = try? fm.url(for: .downloadsDirectory, in: .userDomainMask,
                                     appropriateFor: nil, create: false) else { return nil }
-        let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd-HHmmss"
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")   // stable numeric year regardless of user-region calendar
+        f.dateFormat = "yyyy-MM-dd-HHmmss"
         let url = dir.appending(path: "\(slug(conversation.displayTitle))-\(f.string(from: stamp)).md")
         do {
             try markdown(for: conversation).write(to: url, atomically: true, encoding: .utf8)

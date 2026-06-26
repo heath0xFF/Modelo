@@ -58,6 +58,8 @@ final class GPUMonitor {
         loops.removeAll()
         macmonTask?.cancel(); macmonTask = nil
         macmonProcess?.terminate(); macmonProcess = nil
+        // Drop cached samples so a stopped feed can't keep showing a stale reading as live.
+        snapshots.removeAll()
     }
 
     /// Streams `macmon pipe` and republishes each sample to the opted-in servers.
@@ -79,16 +81,22 @@ final class GPUMonitor {
                     guard let self else { break }
                     for id in ids { self.snapshots[id] = snap }
                 }
-            } catch { /* process ended or read failed — leave last snapshot */ }
+            } catch {
+                // macmon ended or the read failed — clear the samples so the UI doesn't
+                // keep presenting the last reading as if it were live.
+                for id in ids { self?.snapshots[id] = nil }
+            }
         }
     }
 
     private func poll(id: UUID, agentURL: String) async {
         let base = agentURL.hasSuffix("/") ? String(agentURL.dropLast()) : agentURL
-        guard let url = URL(string: "\(base)/gpu") else { return }
+        guard let url = URL(string: "\(base)/gpu") else { snapshots[id] = nil; return }
+        // On any failed refresh, clear this agent's snapshot rather than leaving the
+        // last successful sample on screen as if the box were still reporting.
         guard let (data, response) = try? await session.data(from: url),
               let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),
-              let snap = try? JSONDecoder().decode(GPUSnapshot.self, from: data) else { return }
+              let snap = try? JSONDecoder().decode(GPUSnapshot.self, from: data) else { snapshots[id] = nil; return }
         snapshots[id] = snap
     }
 }

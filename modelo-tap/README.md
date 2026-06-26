@@ -59,11 +59,14 @@ sudo install -m755 target/release/modelo-tap /usr/local/bin/modelo-tap
 ## Run
 
 ```bash
-modelo-tap --port 9099             # serves GET /gpu (binds 0.0.0.0 by default)
-curl -s http://localhost:9099/gpu  # sanity check — JSON with VRAM/power/temp
+modelo-tap --port 9099                  # binds 127.0.0.1 (loopback) by default
+modelo-tap --port 9099 --bind 0.0.0.0   # expose on the LAN (trusted networks only)
+curl -s http://localhost:9099/gpu       # sanity check — JSON with VRAM/power/temp
 ```
 
-Flags: `--port <n>` (default `9099`), `--bind <addr>` (default `0.0.0.0`).
+Flags: `--port <n>` (default `9099`), `--bind <addr>` (default `127.0.0.1` — loopback;
+pass `0.0.0.0` to expose on the LAN). `modelo-tap` has no authentication, so only bind
+to a public interface on a trusted network or behind an SSH tunnel.
 
 Run it as a service to persist across reboots:
 
@@ -74,6 +77,8 @@ Description=Modelo GPU metrics agent (modelo-tap)
 After=network.target
 
 [Service]
+# Loopback by default — reach it through an SSH tunnel. To expose on a trusted LAN,
+# append `--bind 0.0.0.0` (never on an untrusted network; modelo-tap has no auth).
 ExecStart=/usr/local/bin/modelo-tap --port 9099
 Restart=on-failure
 User=YOUR_USER

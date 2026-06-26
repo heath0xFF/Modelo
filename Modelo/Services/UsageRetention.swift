@@ -16,6 +16,12 @@ enum UsageRetention {
         let descriptor = FetchDescriptor<UsageRecord>(predicate: #Predicate { $0.timestamp < cutoff })
         guard let old = try? context.fetch(descriptor), !old.isEmpty else { return }
         for record in old { context.delete(record) }
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            // Don't leave pending deletes dangling in the context for an unrelated save
+            // to commit later — roll back to a clean state on failure.
+            context.rollback()
+        }
     }
 }

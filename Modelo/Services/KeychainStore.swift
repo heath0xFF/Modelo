@@ -37,6 +37,9 @@ struct KeychainStore {
         for (svc, dataProtection) in fallbacks {
             if let value = readItem(account: account, service: svc, dataProtection: dataProtection) {
                 set(value, account: account)
+                // Remove the migrated source item, otherwise a later clear() of the
+                // current key could be silently "restored" from this leftover on next read.
+                SecItemDelete(baseQuery(account: account, service: svc, dataProtection: dataProtection) as CFDictionary)
                 return value
             }
         }
@@ -62,8 +65,12 @@ struct KeychainStore {
     }
 
     private func delete(account: String) {
+        // Clear the secret from every place get() might find it — current and legacy
+        // service, data-protection and legacy keychain — so a cleared key stays cleared.
         SecItemDelete(baseQuery(account: account, service: service, dataProtection: true) as CFDictionary)
         SecItemDelete(baseQuery(account: account, service: service, dataProtection: false) as CFDictionary)
+        SecItemDelete(baseQuery(account: account, service: Self.legacyService, dataProtection: true) as CFDictionary)
+        SecItemDelete(baseQuery(account: account, service: Self.legacyService, dataProtection: false) as CFDictionary)
     }
 
     private func readItem(account: String, service: String, dataProtection: Bool) -> String? {
