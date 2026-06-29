@@ -15,48 +15,36 @@ struct ReportingView: View {
     @State private var serverSortAscending: Bool = false
 
     private var records: [UsageRecord]             { timeRange.filter(all) }
-    private var sortedModels: [ReportCalculator.ModelStat] {
-        models.sorted { a, b in
-            let ascending = modelSortAscending
-            let result: Bool = switch modelSortKey {
-            case .model:       a.shortName < b.shortName
-            case .requests:    a.requests < b.requests
-            case .tokens:      a.totalTokens < b.totalTokens
-            case .tokPerSec:   (a.avgTokPerSec ?? 0) < (b.avgTokPerSec ?? 0)
-            }
-            return ascending ? result : !result
-        }
-    }
-
-    private enum ModelSortKey: String, CaseIterable {
-        case model = "MODEL"
-        case requests = "REQUESTS"
-        case tokens = "TOKENS"
-        case tokPerSec = "TOK/S"
-    }
-
-    private var sortedServers: [ReportCalculator.ServerStat] {
-        servers.sorted { a, b in
-            let ascending = serverSortAscending
-            let result: Bool = switch serverSortKey {
-            case .server: a.serverLabel < b.serverLabel
-            case .requests: a.requests < b.requests
-            case .tokens: a.totalTokens < b.totalTokens
-            }
-            return ascending ? result : !result
-        }
-    }
-
-    private enum ServerSortKey: String, CaseIterable {
-        case server = "SERVER"
-        case requests = "REQUESTS"
-        case tokens = "TOKENS"
-    }
-
     private var summary: ReportCalculator.Summary  { ReportCalculator.summary(from: records) }
     private var days:    [ReportCalculator.DayBucket]  { ReportCalculator.byDay(from: records) }
     private var models:  [ReportCalculator.ModelStat]  { ReportCalculator.byModel(from: records) }
     private var servers: [ReportCalculator.ServerStat] { ReportCalculator.byServer(from: records) }
+
+    private enum ModelSortKey { case model, requests, tokens, tokPerSec }
+    private enum ServerSortKey { case server, requests, tokens }
+
+    private var sortedModels: [ReportCalculator.ModelStat] {
+        models.sorted { a, b in
+            let result: Bool = switch modelSortKey {
+            case .model:     a.shortName < b.shortName
+            case .requests:  a.requests < b.requests
+            case .tokens:    a.totalTokens < b.totalTokens
+            case .tokPerSec: (a.avgTokPerSec ?? -1) < (b.avgTokPerSec ?? -1)
+            }
+            return modelSortAscending ? result : !result
+        }
+    }
+
+    private var sortedServers: [ReportCalculator.ServerStat] {
+        servers.sorted { a, b in
+            let result: Bool = switch serverSortKey {
+            case .server:   a.serverLabel < b.serverLabel
+            case .requests: a.requests < b.requests
+            case .tokens:   a.totalTokens < b.totalTokens
+            }
+            return serverSortAscending ? result : !result
+        }
+    }
 
     private let tileColumns = Array(repeating: GridItem(.flexible(), spacing: 11), count: 5)
 
@@ -108,7 +96,9 @@ struct ReportingView: View {
             }
             .padding(.horizontal, 28)
             .padding(.vertical, 24)
+            .hideScrollIndicators()
         }
+        .scrollIndicators(.hidden)
         .background(Theme.windowBG)
         .onAppear(perform: prune)
         .onChange(of: retentionDays) { prune() }
@@ -223,69 +213,6 @@ struct ReportingView: View {
         }
     }
 
-    private var modelTableHeader: some View {
-        HStack(spacing: 12) {
-            sortHeader("MODEL", key: ModelSortKey.model, alignment: .leading)
-            sortHeader("REQUESTS", key: ModelSortKey.requests, alignment: .trailing)
-            sortHeader("TOKENS", key: ModelSortKey.tokens, alignment: .trailing)
-            sortHeader("TOK/S", key: ModelSortKey.tokPerSec, alignment: .trailing)
-            Text("SHARE")
-                .font(.mono(9.5)).tracking(0.8)
-                .foregroundStyle(Theme.textFaint)
-                .frame(maxWidth: .infinity, alignment: .trailing)
-        }
-        .padding(.vertical, 10)
-        .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
-    }
-
-    private func sortHeader(_ title: String, key: ModelSortKey, alignment: Alignment) -> some View {
-        let isActive = modelSortKey == key
-        return Button {
-            if modelSortKey == key {
-                modelSortAscending.toggle()
-            } else {
-                modelSortKey = key
-                modelSortAscending = (key == .model)
-            }
-        } label: {
-            HStack(spacing: 4) {
-                Text(title)
-                    .font(.mono(9.5)).tracking(0.8)
-                    .foregroundStyle(isActive ? Theme.amber : Theme.textFaint)
-                Text(modelSortKey == key ? (modelSortAscending ? "▲" : "▼") : "")
-                    .font(.mono(8))
-                    .foregroundStyle(isActive ? Theme.amber : .clear)
-                    .frame(width: 8)
-            }
-            .frame(maxWidth: .infinity, alignment: alignment)
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func sortHeader(_ title: String, key: ServerSortKey, alignment: Alignment) -> some View {
-        let isActive = serverSortKey == key
-        return Button {
-            if serverSortKey == key {
-                serverSortAscending.toggle()
-            } else {
-                serverSortKey = key
-                serverSortAscending = (key == .server)
-            }
-        } label: {
-            HStack(spacing: 4) {
-                Text(title)
-                    .font(.mono(9.5)).tracking(0.8)
-                    .foregroundStyle(isActive ? Theme.amber : Theme.textFaint)
-                Text(serverSortKey == key ? (serverSortAscending ? "▲" : "▼") : "")
-                    .font(.mono(8))
-                    .foregroundStyle(isActive ? Theme.amber : .clear)
-                    .frame(width: 8)
-            }
-            .frame(maxWidth: .infinity, alignment: alignment)
-        }
-        .buttonStyle(.plain)
-    }
-
     private var serverSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Eyebrow("By server")
@@ -306,11 +233,69 @@ struct ReportingView: View {
         }
     }
 
+    private func sortHeader(
+        _ title: String,
+        isActive: Bool,
+        isAscending: Bool,
+        alignment: Alignment,
+        onTap: @escaping () -> Void
+    ) -> some View {
+        Button(action: onTap) {
+            HStack(spacing: 4) {
+                Text(title)
+                    .font(.mono(9.5)).tracking(0.8)
+                    .foregroundStyle(isActive ? Theme.amber : Theme.textFaint)
+                Text(isActive ? (isAscending ? "▲" : "▼") : "")
+                    .font(.mono(8))
+                    .foregroundStyle(isActive ? Theme.amber : .clear)
+                    .frame(width: 8)
+            }
+            .frame(maxWidth: .infinity, alignment: alignment)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var modelTableHeader: some View {
+        HStack(spacing: 12) {
+            sortHeader("MODEL", isActive: modelSortKey == .model, isAscending: modelSortAscending, alignment: .leading) {
+                if modelSortKey == .model { modelSortAscending.toggle() }
+                else { modelSortKey = .model; modelSortAscending = true }
+            }
+            sortHeader("REQUESTS", isActive: modelSortKey == .requests, isAscending: modelSortAscending, alignment: .trailing) {
+                if modelSortKey == .requests { modelSortAscending.toggle() }
+                else { modelSortKey = .requests; modelSortAscending = false }
+            }
+            sortHeader("TOKENS", isActive: modelSortKey == .tokens, isAscending: modelSortAscending, alignment: .trailing) {
+                if modelSortKey == .tokens { modelSortAscending.toggle() }
+                else { modelSortKey = .tokens; modelSortAscending = false }
+            }
+            sortHeader("TOK/S", isActive: modelSortKey == .tokPerSec, isAscending: modelSortAscending, alignment: .trailing) {
+                if modelSortKey == .tokPerSec { modelSortAscending.toggle() }
+                else { modelSortKey = .tokPerSec; modelSortAscending = false }
+            }
+            Text("SHARE")
+                .font(.mono(9.5)).tracking(0.8)
+                .foregroundStyle(Theme.textFaint)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+        .padding(.vertical, 10)
+        .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
+    }
+
     private var serverTableHeader: some View {
         HStack(spacing: 12) {
-            sortHeader("SERVER", key: ServerSortKey.server, alignment: .leading)
-            sortHeader("REQUESTS", key: ServerSortKey.requests, alignment: .trailing)
-            sortHeader("TOKENS", key: ServerSortKey.tokens, alignment: .trailing)
+            sortHeader("SERVER", isActive: serverSortKey == .server, isAscending: serverSortAscending, alignment: .leading) {
+                if serverSortKey == .server { serverSortAscending.toggle() }
+                else { serverSortKey = .server; serverSortAscending = true }
+            }
+            sortHeader("REQUESTS", isActive: serverSortKey == .requests, isAscending: serverSortAscending, alignment: .trailing) {
+                if serverSortKey == .requests { serverSortAscending.toggle() }
+                else { serverSortKey = .requests; serverSortAscending = false }
+            }
+            sortHeader("TOKENS", isActive: serverSortKey == .tokens, isAscending: serverSortAscending, alignment: .trailing) {
+                if serverSortKey == .tokens { serverSortAscending.toggle() }
+                else { serverSortKey = .tokens; serverSortAscending = false }
+            }
         }
         .padding(.vertical, 10)
         .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
