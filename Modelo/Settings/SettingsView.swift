@@ -817,6 +817,7 @@ private struct ServerSettingsRow: View {
     @State private var needsAuth = false
     @State private var isExpanded = false
     @Environment(\.modelContext) private var modelContext
+    @Environment(ServerRegistry.self) private var registry
     private let keychain = KeychainStore()
     private var keychainAccount: String { Endpoint.keychainAccount(for: server) }
 
@@ -826,6 +827,7 @@ private struct ServerSettingsRow: View {
         VStack(alignment: .leading, spacing: 14) {
             // Header: always visible — tap to expand/collapse
             HStack(spacing: 8) {
+                StatusLED(status: registry.status(for: server))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(server.label.isEmpty ? "Unnamed" : server.label)
                         .font(Theme.mono(13, weight: .semibold))
@@ -1235,6 +1237,7 @@ private struct CloudServerSettingsRow: View {
     @State private var isKeyRevealed = false
     @State private var isExpanded = false
     @FocusState private var focus: Field?
+    @Environment(ServerRegistry.self) private var registry
 
     private enum Field { case label, url, key }
     private var keychainAccount: String { Endpoint.keychainAccount(for: server) }
@@ -1243,6 +1246,7 @@ private struct CloudServerSettingsRow: View {
         VStack(alignment: .leading, spacing: 14) {
             // Header: always visible — tap to expand/collapse
             HStack(spacing: 8) {
+                StatusLED(status: registry.status(for: server))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(server.label.isEmpty ? "Unnamed" : server.label)
                         .font(Theme.mono(13, weight: .semibold))
