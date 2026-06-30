@@ -54,7 +54,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.peregrine.modelo
         PRODUCT_NAME: Modelo
         PRODUCT_MODULE_NAME: Modelo
-        MARKETING_VERSION: "0.1"
+        MARKETING_VERSION: "0.2.4"
         CURRENT_PROJECT_VERSION: "1"
         ENABLE_HARDENED_RUNTIME: YES
         SWIFT_VERSION: "5.0"
