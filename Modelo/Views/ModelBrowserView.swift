@@ -74,6 +74,7 @@ struct ModelBrowserView: View {
                         }
                     }
                     .padding(.horizontal, 12)
+                    .hideScrollIndicators()
                 }
                 .padding(.bottom, 8)
             }
@@ -90,6 +91,8 @@ struct ModelBrowserView: View {
                 .tag(item)
             }
             .searchable(text: $query, placement: .toolbar, prompt: "Search models")
+            .scrollIndicators(.hidden)
+            .hideScrollIndicators()
         }
         .frame(minWidth: 460, minHeight: 420)
     }

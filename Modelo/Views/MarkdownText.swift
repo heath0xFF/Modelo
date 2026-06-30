@@ -62,6 +62,7 @@ private struct ModeloCodeBlock: View {
                 configuration.label
                     .padding(12)
                     .textSelection(.enabled)
+                    .hideScrollIndicators()
             }
         }
         .background(Theme.consoleBG, in: RoundedRectangle(cornerRadius: Theme.Radius.control))

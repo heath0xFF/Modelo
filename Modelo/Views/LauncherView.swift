@@ -18,6 +18,7 @@ struct LauncherView: View {
     @State private var isRefreshing = false
     @State private var selectedPersona: Persona?
     @State private var activeFilters: Set<String> = ["free"]
+    @State private var personaOffset: CGFloat = 0
     @Environment(ServerRegistry.self) private var registry
     @Environment(FavoritesStore.self) private var favorites
     @Query(sort: \Server.sortOrder) private var servers: [Server]
@@ -65,25 +66,87 @@ struct LauncherView: View {
                     modelSection
                 }
                 .padding(24)
+                .hideScrollIndicators()
             }
+            .scrollIndicators(.hidden)
         }
     }
 
     // MARK: - Persona row
 
     private var personaSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let canScrollLeft = personaOffset < -1
+        return VStack(alignment: .leading, spacing: 10) {
             Eyebrow("Persona — optional")
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    ForEach(personas) { persona in
-                        PersonaTile(
-                            persona: persona,
-                            isSelected: selectedPersona?.persistentModelID == persona.persistentModelID
-                        ) {
-                            selectedPersona = selectedPersona?.persistentModelID == persona.persistentModelID ? nil : persona
+            // ViewThatFits tries the flat HStack first; if it overflows the
+            // available width, SwiftUI falls back to the ScrollView branch —
+            // at which point we know overflow exists and can show the chevrons.
+            ViewThatFits(in: .horizontal) {
+                personaTiles
+                ScrollViewReader { proxy in
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        personaTiles
+                            .background(GeometryReader { geo in
+                                Color.clear.preference(
+                                    key: PersonaScrollKey.self,
+                                    value: geo.frame(in: .named("personaScroll")).origin
+                                )
+                            })
+                    }
+                    .hideScrollIndicators()
+                    .coordinateSpace(name: "personaScroll")
+                    .onPreferenceChange(PersonaScrollKey.self) { personaOffset = $0.x }
+                    .overlay(alignment: .leading) {
+                        if canScrollLeft {
+                            Button {
+                                withAnimation { proxy.scrollTo(personas.first?.id, anchor: .leading) }
+                            } label: {
+                                LinearGradient(
+                                    colors: [Theme.windowBG, .clear],
+                                    startPoint: .leading, endPoint: .trailing
+                                )
+                                .frame(width: 32)
+                                .overlay(alignment: .leading) {
+                                    Image(systemName: "chevron.left")
+                                        .font(.system(size: 10, weight: .medium))
+                                        .foregroundStyle(.secondary)
+                                        .padding(.leading, 6)
+                                }
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
+                    .overlay(alignment: .trailing) {
+                        Button {
+                            withAnimation { proxy.scrollTo(personas.last?.id, anchor: .trailing) }
+                        } label: {
+                            LinearGradient(
+                                colors: [.clear, Theme.windowBG],
+                                startPoint: .leading, endPoint: .trailing
+                            )
+                            .frame(width: 32)
+                            .overlay(alignment: .trailing) {
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundStyle(.secondary)
+                                    .padding(.trailing, 6)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+
+    private var personaTiles: some View {
+        HStack(spacing: 10) {
+            ForEach(personas) { persona in
+                PersonaTile(
+                    persona: persona,
+                    isSelected: selectedPersona?.persistentModelID == persona.persistentModelID
+                ) {
+                    selectedPersona = selectedPersona?.persistentModelID == persona.persistentModelID ? nil : persona
                 }
             }
         }
@@ -130,6 +193,7 @@ struct LauncherView: View {
                         }
                     }
                 }
+                .hideScrollIndicators()
             }
             Spacer(minLength: 8)
             if let onRefresh {
@@ -497,6 +561,8 @@ private struct PersonaEditPopover: View {
                     .font(Theme.metric(12))
                     .foregroundStyle(Theme.textHi)
                     .scrollContentBackground(.hidden)
+                    .scrollIndicators(.hidden)
+                    .hideScrollIndicators()
                     .focused($focus, equals: .prompt)
                     .frame(minHeight: 80, maxHeight: 160)
                     .padding(.horizontal, 11)
@@ -703,3 +769,11 @@ private struct ModelTile: View {
         .help("Start a chat with \(model.familyName)")
     }
 }
+
+// MARK: - PreferenceKeys for persona scroll fade
+
+private struct PersonaScrollKey: PreferenceKey {
+    static var defaultValue: CGPoint = .zero
+    static func reduce(value: inout CGPoint, nextValue: () -> CGPoint) { value = nextValue() }
+}
+

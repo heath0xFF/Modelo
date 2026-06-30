@@ -59,6 +59,7 @@ struct ServerStatsView: View {
                     }
                 }
             }
+            .hideScrollIndicators()
         }
     }
 
@@ -171,7 +172,9 @@ private struct ServerStatsDashboardPanel: View {
             }
             .padding(.horizontal, 28)
             .padding(.vertical, 24)
+            .hideScrollIndicators()
         }
+        .scrollIndicators(.hidden)
     }
 
     // MARK: Header
@@ -222,6 +225,10 @@ private struct ServerStatsDashboardPanel: View {
                 .foregroundStyle(Theme.textDim)
         case .unknown:
             Text("PROBING")
+                .font(.mono(9)).tracking(1)
+                .foregroundStyle(Theme.textDim)
+        case .needsKey:
+            Text("NO KEY")
                 .font(.mono(9)).tracking(1)
                 .foregroundStyle(Theme.textDim)
         }

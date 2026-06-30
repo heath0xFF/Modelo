@@ -413,6 +413,8 @@ struct ChatView: View {
                         .frame(maxWidth: .infinity, minHeight: geo.size.height, alignment: .bottomLeading)
                     }
                 }
+                .scrollIndicators(.hidden)
+                .hideScrollIndicators()
                 // Scroll to bottom when a new message is appended.
                 .onChange(of: conversation.messages.count) { scrollToBottom(proxy) }
                 // Timer-based scroll during streaming: fires at ~20fps instead of once
@@ -612,6 +614,7 @@ struct ChatView: View {
             }
             .padding(.horizontal, 16)
             .padding(.top, 8)
+            .hideScrollIndicators()
         }
     }
 
@@ -737,6 +740,7 @@ struct ChatView: View {
             .padding(.horizontal, 16)
             .padding(.top, 10)
             .padding(.bottom, 4)
+            .hideScrollIndicators()
         }
     }
 
@@ -1086,6 +1090,7 @@ private struct ToolApprovalCard: View {
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(8)
+                    .hideScrollIndicators()
             }
             .frame(maxHeight: 160)
             .background(Theme.consoleBG, in: RoundedRectangle(cornerRadius: Theme.Radius.field))

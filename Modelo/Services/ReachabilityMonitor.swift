@@ -38,6 +38,16 @@ final class ReachabilityMonitor {
         // Build the Sendable Endpoint snapshot off the @Model here, on the main
         // actor, before handing it to the off-main probe.
         let endpoint = Endpoint(server: server, keychain: keychain)
+
+        // Cloud servers (OpenRouter, custom cloud APIs) with no API key are
+        // reachable but unusable for chat — mark them distinctly so the UI
+        // can prompt the user to add a key instead of showing a misleading green dot.
+        if !server.kind.isLocal, endpoint.apiKey == nil {
+            registry.setStatus(.needsKey, for: server)
+            registry.setLatency(nil, for: server)
+            return
+        }
+
         // Time the probe round-trip for the Status dashboard's latency tile. The
         // probe is a single short HTTP request, so wall-clock around the await is
         // a good proxy for endpoint latency.

@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// Centralized design tokens for Modelo's "instrument" look — a dark,
 /// telemetry-forward control surface for local inference. Colors, fonts, and the
@@ -255,9 +256,10 @@ struct StatusLED: View {
 
     private var color: Color {
         switch status {
-        case .online:  Theme.Palette.live
-        case .offline: Theme.Palette.offline
-        case .unknown: Theme.Palette.idle
+        case .online:    Theme.Palette.live
+        case .offline:   Theme.Palette.offline
+        case .unknown:   Theme.Palette.idle
+        case .needsKey:  Theme.Palette.idle
         }
     }
 
@@ -457,5 +459,89 @@ struct SegmentedPills: View {
                     .overlay(RoundedRectangle(cornerRadius: Theme.Radius.control).stroke(Theme.line))
             }
         }
+    }
+}
+
+// MARK: - Scrollbar hiding
+
+/// Force-hides macOS scrollbars even when the system "Show scroll bars" setting
+/// shows *persistent* (legacy) scrollers — i.e. "Always", or "Automatic" while a
+/// mouse is connected. SwiftUI's `.scrollIndicators(.hidden)` only affects the
+/// overlay style and is silently ignored for legacy scrollers, so we reach into
+/// the backing `NSScrollView` and disable the scrollers directly.
+///
+/// A zero-size probe is installed in the view's background; it then locates the
+/// associated `NSScrollView` and turns its scrollers off.
+private struct ScrollIndicatorHider: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        ScrollHiderProbe(frame: .zero)
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        (nsView as? ScrollHiderProbe)?.hideIfNeeded()
+    }
+}
+
+/// Zero-size probe that finds the nearest `NSScrollView` and disables its
+/// scrollers. Hooks into `layout()` so the lookup runs once the view is
+/// actually in the hierarchy — more reliable than
+/// `DispatchQueue.main.async` which can fire before the superview chain is built.
+private class ScrollHiderProbe: NSView {
+    override var acceptsFirstResponder: Bool { false }
+    private var didHide = false
+
+    override func layout() {
+        super.layout()
+        guard !didHide, window != nil else { return }
+        didHide = true
+        hideIfNeeded()
+    }
+
+    fileprivate func hideIfNeeded() {
+        Self.hideScrollers(near: self)
+    }
+
+    /// Resolves the scroll view for `probe` and disables its scrollers. Two
+    /// placements are supported, so `.hideScrollIndicators()` works whether it's
+    /// applied to a `ScrollView`'s content or to a `List`/`ScrollView` directly:
+    /// 1. Probe *inside* the scroll content → found via `enclosingScrollView`.
+    /// 2. Probe as a *sibling* of the scroll view (the `.background` lands next to
+    ///    a `List`/`Table`, or a `ScrollView` with conditional content) → found by
+    ///    searching the probe's container for the nearest `NSScrollView`.
+    private static func hideScrollers(near probe: NSView) {
+        if let scrollView = probe.enclosingScrollView {
+            disable(scrollView)
+        } else if let container = probe.superview,
+                  let scrollView = nearestScrollView(in: container) {
+            disable(scrollView)
+        }
+    }
+
+    private static func disable(_ scrollView: NSScrollView) {
+        scrollView.hasVerticalScroller = false
+        scrollView.hasHorizontalScroller = false
+        scrollView.scrollerStyle = .overlay
+    }
+
+    /// Breadth-first search for the shallowest `NSScrollView` under `root`, so a
+    /// nested inner scroll view is never picked ahead of the intended outer one.
+    private static func nearestScrollView(in root: NSView) -> NSScrollView? {
+        var queue = root.subviews
+        while !queue.isEmpty {
+            let view = queue.removeFirst()
+            if let scrollView = view as? NSScrollView { return scrollView }
+            queue.append(contentsOf: view.subviews)
+        }
+        return nil
+    }
+}
+
+extension View {
+    /// Hides macOS scrollbars regardless of the user's "Show scroll bars" system
+    /// preference — a reliable replacement for `.scrollIndicators(.hidden)`, which
+    /// AppKit ignores when persistent (legacy) scrollers are shown. Apply to a
+    /// `ScrollView`'s content, or directly to a `List`/`ScrollView`.
+    func hideScrollIndicators() -> some View {
+        background(ScrollIndicatorHider().frame(width: 0, height: 0).allowsHitTesting(false))
     }
 }

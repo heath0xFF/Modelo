@@ -399,7 +399,10 @@ struct ContentView: View {
 
         // A server that just returned a model list is, by definition, reachable —
         // mark it online so its dot turns green without waiting for the next probe.
+        // Exception: cloud servers with no key are reachable via public endpoints
+        // but can't be used for chat — keep them in .needsKey rather than .online.
         for (index, target) in targets.enumerated() where !(modelsByIndex[index] ?? []).isEmpty {
+            if !target.server.kind.isLocal, target.endpoint.apiKey == nil { continue }
             registry.setStatus(.online, for: target.server)
         }
 

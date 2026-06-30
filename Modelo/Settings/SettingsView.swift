@@ -19,13 +19,26 @@ struct SettingsView: View {
     @Query(sort: \Server.sortOrder) private var servers: [Server]
     @Query(sort: \Persona.sortOrder) private var personas: [Persona]
     private let keychain = KeychainStore()
-    @State private var selectedTab = "Servers"
+    @State private var selectedTab = "Endpoints"
+    @State private var newlyAddedID: UUID?
+    @State private var selectedPersonaID: Persona.ID?
 
-    private static let tabTitles = ["Servers", "Cloud APIs", "Personas", "Sampling",
+    private static let tabTitles = ["Endpoints", "Personas",
                                     "Presets", "Appearance", "Tools", "MCP Servers"]
 
-    private var localServers: [Server] { servers.filter { $0.kind.isLocal } }
-    private var cloudServers: [Server] { servers.filter { $0.kind == .cloudAPI || $0.kind == .openRouter } }
+    private struct CloudPreset: Identifiable {
+        var id: String { name }
+        let name: String
+        let baseURL: String
+    }
+    private static let cloudPresets: [CloudPreset] = [
+        .init(name: "OpenAI",     baseURL: "https://api.openai.com/v1"),
+        .init(name: "Groq",       baseURL: "https://api.groq.com/openai/v1"),
+        .init(name: "OpenRouter", baseURL: "https://openrouter.ai/api/v1"),
+        .init(name: "Together",   baseURL: "https://api.together.xyz/v1"),
+        .init(name: "DeepSeek",   baseURL: "https://api.deepseek.com/v1"),
+        .init(name: "Mistral",    baseURL: "https://api.mistral.ai/v1"),
+    ]
 
     var body: some View {
         if isInline {
@@ -52,14 +65,12 @@ struct SettingsView: View {
             Divider().overlay(Theme.line)
             Group {
                 switch selectedTab {
-                case "Cloud APIs":  cloudAPIsTab
                 case "Personas":    personasTab
-                case "Sampling":    SamplingSettingsTab()
                 case "Presets":     PresetsSettingsTab()
                 case "Appearance":  AppearanceSettingsTab()
                 case "Tools":       toolsTab
                 case "MCP Servers": mcpServersTab
-                default:            serversTab
+                default:            endpointsTab
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -69,55 +80,138 @@ struct SettingsView: View {
         .preferredColorScheme(Theme.active.scheme)
     }
 
-    // MARK: Servers
-    private var serversTab: some View {
-        ScrollView {
-            VStack(spacing: 12) {
-                ForEach(localServers) { server in
-                    ServerSettingsRow(server: server) {
-                        context.delete(server)
-                        try? context.save()
-                    }
-                }
-                addButton("Add Server", action: addServer)
-            }
-            .padding(24)
+    // MARK: Endpoints
+
+    @ViewBuilder
+    private func endpointRow(for server: Server) -> some View {
+        if server.kind.isLocal {
+            ServerSettingsRow(server: server,
+                              onDelete: {
+                context.delete(server)
+                try? context.save()
+            }, autoExpand: server.id == newlyAddedID)
+        } else {
+            CloudServerSettingsRow(server: server, keychain: keychain,
+                                   onDelete: {
+                context.delete(server)
+                try? context.save()
+            }, autoExpand: server.id == newlyAddedID)
         }
-        .clipped()
     }
 
-    // MARK: Cloud APIs
-    private var cloudAPIsTab: some View {
-        ScrollView {
-            VStack(spacing: 12) {
-                ForEach(cloudServers) { server in
-                    CloudServerSettingsRow(server: server, keychain: keychain) {
-                        context.delete(server)
-                        try? context.save()
+    private var endpointsTab: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: 12) {
+                    ForEach(servers) { server in
+                        endpointRow(for: server)
+                            .id(server.id)
                     }
+                    // Local server is a single action; Cloud API fans out to provider presets.
+                    Menu {
+                        Button(action: addServer) {
+                            Label("Local server", systemImage: "server.rack")
+                        }
+                        Menu("Cloud API") {
+                            ForEach(Self.cloudPresets) { preset in
+                                Button(preset.name) {
+                                    addCloudServer(label: preset.name, baseURL: preset.baseURL)
+                                }
+                            }
+                            Divider()
+                            Button("Custom…") { addCloudServer() }
+                        }
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "plus")
+                                .font(.system(size: 11, weight: .semibold))
+                            Text("Add Endpoint")
+                                .font(Theme.label(11))
+                        }
+                        .foregroundStyle(Theme.amber)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 9)
+                        .frame(maxWidth: .infinity)
+                        .panel(Theme.popoverBG, radius: 9,
+                               stroke: Theme.amber.opacity(0.3))
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
                 }
-                addButton("Add Cloud API", action: addCloudServer)
+                .padding(24)
+                .hideScrollIndicators()
             }
-            .padding(24)
+            .scrollIndicators(.hidden)
+            .clipped()
+            .onChange(of: newlyAddedID) { _, id in
+                guard let id else { return }
+                withAnimation { proxy.scrollTo(id, anchor: .top) }
+            }
         }
-        .clipped()
     }
 
     // MARK: Personas
     private var personasTab: some View {
-        ScrollView {
-            VStack(spacing: 12) {
-                ForEach(personas) { persona in
-                    PersonaSettingsRow(persona: persona) {
-                        context.delete(persona)
-                        try? context.save()
+        HStack(spacing: 0) {
+            // Left: compact selectable list
+            VStack(spacing: 0) {
+                Text("Personas are reusable roles — pick one as a tile on the launcher to seed a new chat's system prompt.")
+                    .font(Theme.metric(10))
+                    .foregroundStyle(Theme.textFaint)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.bottom, 12)
+                ScrollView {
+                    VStack(spacing: 4) {
+                        ForEach(personas) { persona in
+                            PersonaListRow(
+                                persona: persona,
+                                isSelected: persona.id == selectedPersonaID,
+                                onTap: { selectedPersonaID = persona.id },
+                                onDelete: {
+                                    let deletingSelected = persona.id == selectedPersonaID
+                                    context.delete(persona)
+                                    try? context.save()
+                                    if deletingSelected {
+                                        selectedPersonaID = personas.first(where: { $0.id != persona.id })?.id
+                                    }
+                                }
+                            )
+                        }
                     }
                 }
+                .scrollIndicators(.hidden)
+                .frame(maxHeight: .infinity)
                 addButton("Add Persona", action: addPersona)
+                    .padding(.top, 10)
             }
-            .padding(24)
+            .padding(16)
+            .frame(width: 240)
+
+            Divider().overlay(Theme.line)
+
+            // Right: edit pane for the selected persona
+            Group {
+                if let selected = personas.first(where: { $0.id == selectedPersonaID }) {
+                    PersonaEditPane(persona: selected)
+                        .id(selected.id)
+                } else {
+                    VStack {
+                        Spacer()
+                        Text("Select a persona to edit")
+                            .font(Theme.metric(11))
+                            .foregroundStyle(Theme.textFaint)
+                        Spacer()
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .clipped()
+        .onAppear {
+            if selectedPersonaID == nil {
+                selectedPersonaID = personas.first?.id
+            }
+        }
     }
 
     // MARK: Tools
@@ -135,7 +229,9 @@ struct SettingsView: View {
                         keychain: keychain)
             }
             .padding(24)
+            .hideScrollIndicators()
         }
+        .scrollIndicators(.hidden)
         .clipped()
     }
 
@@ -166,7 +262,9 @@ struct SettingsView: View {
                 }
             }
             .padding(24)
+            .hideScrollIndicators()
         }
+        .scrollIndicators(.hidden)
         .clipped()
     }
 
@@ -198,18 +296,20 @@ struct SettingsView: View {
         ))
     }
 
-    private func addCloudServer() {
+    private func addCloudServer(label: String = "Cloud API", baseURL: String = "") {
         let nextOrder = (servers.map(\.sortOrder).max() ?? 0) + 1
-        let server = Server(label: "Cloud API", host: "", port: 0, sortOrder: nextOrder, kind: .cloudAPI)
+        let server = Server(label: label, host: baseURL, port: 0, sortOrder: nextOrder, kind: .cloudAPI)
         context.insert(server)
         try? context.save()
+        newlyAddedID = server.id
     }
 
     private func addServer() {
-        let nextOrder = (localServers.map(\.sortOrder).max() ?? 0) + 1
+        let nextOrder = (servers.map(\.sortOrder).max() ?? 0) + 1
         let server = Server(label: "New Server", host: "localhost", port: 1234, sortOrder: nextOrder)
         context.insert(server)
         try? context.save()
+        newlyAddedID = server.id
     }
 
     private func addPersona() {
@@ -218,126 +318,151 @@ struct SettingsView: View {
                               tagline: "", systemPrompt: "", sortOrder: nextOrder)
         context.insert(persona)
         try? context.save()
+        selectedPersonaID = persona.id
     }
 }
 
-// MARK: - Persona row
+// MARK: - Persona list row (left column)
 
-private struct PersonaSettingsRow: View {
-    @Bindable var persona: Persona
+private struct PersonaListRow: View {
+    let persona: Persona
+    let isSelected: Bool
+    let onTap: () -> Void
     let onDelete: () -> Void
-    @FocusState private var focus: Field?
-    @State private var isExpanded = false
-
-    private enum Field { case name, icon, tagline, prompt }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            // Header: always visible — tap to expand/collapse
-            HStack(spacing: 10) {
-                Image(systemName: validIcon)
-                    .font(.system(size: 16))
-                    .foregroundStyle(Theme.amber)
-                    .frame(width: 24)
+        HStack(spacing: 10) {
+            Image(systemName: validIcon)
+                .font(.system(size: 14))
+                .foregroundStyle(isSelected ? Theme.amber : Theme.textMute)
+                .frame(width: 18)
+            VStack(alignment: .leading, spacing: 2) {
                 Text(persona.name.isEmpty ? "Unnamed" : persona.name)
-                    .font(Theme.mono(13, weight: .semibold))
+                    .font(Theme.mono(12, weight: .semibold))
                     .foregroundStyle(Theme.textHi)
+                    .lineLimit(1)
                 if !persona.tagline.isEmpty {
-                    Text("·")
-                        .foregroundStyle(Theme.textFaint)
                     Text(persona.tagline)
-                        .font(Theme.metric(11))
+                        .font(Theme.metric(10))
                         .foregroundStyle(Theme.textLo)
                         .lineLimit(1)
                 }
-                Spacer(minLength: 8)
-                Button(action: onDelete) {
-                    Image(systemName: "trash")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Theme.Palette.alert.opacity(0.7))
-                }
-                .buttonStyle(.plain)
-                .help("Delete persona")
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(Theme.textFaint)
-                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                    .animation(.easeOut(duration: 0.18), value: isExpanded)
             }
-            .contentShape(Rectangle())
-            .onTapGesture { withAnimation(.easeOut(duration: 0.18)) { isExpanded.toggle() } }
-            .help(isExpanded ? "Collapse persona" : "Edit persona")
-
-            if isExpanded {
-                VStack(alignment: .leading, spacing: 14) {
-                    HStack(spacing: 12) {
-                        FieldGroup(caption: "Name") {
-                            TextField("Name", text: $persona.name)
-                                .textFieldStyle(.plain)
-                                .focused($focus, equals: .name)
-                                .fieldChrome(focused: focus == .name)
-                                .frame(width: 140)
-                        }
-                        .fixedSize()
-                        FieldGroup(caption: "Icon (SF Symbol)") {
-                            TextField("e.g. brain", text: $persona.icon)
-                                .textFieldStyle(.plain)
-                                .focused($focus, equals: .icon)
-                                .fieldChrome(focused: focus == .icon)
-                                .frame(width: 140)
-                        }
-                        .fixedSize()
-                    }
-
-                    FieldGroup(caption: "Tagline") {
-                        TextField("Brief descriptor", text: $persona.tagline)
-                            .textFieldStyle(.plain)
-                            .focused($focus, equals: .tagline)
-                            .fieldChrome(focused: focus == .tagline)
-                    }
-
-                    FieldGroup(caption: "System Prompt") {
-                        TextEditor(text: $persona.systemPrompt)
-                            .font(Theme.metric(12))
-                            .foregroundStyle(Theme.textHi)
-                            .scrollContentBackground(.hidden)
-                            .focused($focus, equals: .prompt)
-                            .frame(minHeight: 80, maxHeight: 160)
-                            .padding(.horizontal, 11)
-                            .padding(.vertical, 8)
-                            .background(Theme.windowBG,
-                                        in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .strokeBorder(focus == .prompt
-                                                  ? Theme.amber.opacity(0.85)
-                                                  : Color.white.opacity(0.10),
-                                                  lineWidth: 1)
-                            )
-                            .animation(.snappy(duration: 0.2), value: focus == .prompt)
-                    }
-                }
-                .transition(.opacity.combined(with: .move(edge: .top)))
+            Spacer(minLength: 4)
+            Button(action: onDelete) {
+                Image(systemName: "trash")
+                    .font(.system(size: 10))
+                    .foregroundStyle(Theme.Palette.alert.opacity(0.65))
             }
+            .buttonStyle(.plain)
+            .help("Delete persona")
+            .opacity(isSelected ? 1 : 0)
         }
-        .padding(16)
-        .panel(Theme.popoverBG)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            isSelected ? Theme.amber.opacity(0.12) : Color.clear,
+            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(isSelected ? Theme.amber.opacity(0.35) : Color.clear, lineWidth: 1)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture { onTap() }
     }
 
-    /// Falls back to "person" if the entered symbol name doesn't resolve.
     private var validIcon: String {
         NSImage(systemSymbolName: persona.icon, accessibilityDescription: nil) != nil
             ? persona.icon : "person"
     }
 }
 
-// MARK: - Sampling defaults (§1.4)
+// MARK: - Persona edit pane (right column)
 
-/// Edits the global default `SamplingParams` (stored JSON-encoded in `@AppStorage`)
-/// that every conversation inherits unless it sets its own override. Each control
-/// has an on/off pill: off means the parameter isn't sent at all, so the server
-/// falls back to its own default.
-private struct SamplingSettingsTab: View {
+private struct PersonaEditPane: View {
+    @Bindable var persona: Persona
+    @FocusState private var focus: Field?
+
+    private enum Field { case name, icon, tagline, prompt }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                FieldGroup(caption: "Name") {
+                    TextField("Name", text: $persona.name)
+                        .textFieldStyle(.plain)
+                        .focused($focus, equals: .name)
+                        .fieldChrome(focused: focus == .name)
+                        .frame(width: 160)
+                }
+                .fixedSize()
+                FieldGroup(caption: "Icon (SF Symbol)") {
+                    HStack(spacing: 8) {
+                        Image(systemName: validIcon)
+                            .font(.system(size: 15))
+                            .foregroundStyle(Theme.amber)
+                            .frame(width: 18)
+                        TextField("e.g. brain", text: $persona.icon)
+                            .textFieldStyle(.plain)
+                            .focused($focus, equals: .icon)
+                            .fieldChrome(focused: focus == .icon)
+                            .frame(width: 120)
+                    }
+                }
+                .fixedSize()
+            }
+
+            FieldGroup(caption: "Tagline") {
+                TextField("Brief descriptor", text: $persona.tagline)
+                    .textFieldStyle(.plain)
+                    .focused($focus, equals: .tagline)
+                    .fieldChrome(focused: focus == .tagline)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Eyebrow("System Prompt", size: 9)
+                TextEditor(text: $persona.systemPrompt)
+                    .font(Theme.metric(12))
+                    .foregroundStyle(Theme.textHi)
+                    .scrollContentBackground(.hidden)
+                    .scrollIndicators(.hidden)
+                    .hideScrollIndicators()
+                    .focused($focus, equals: .prompt)
+                    .frame(maxHeight: .infinity)
+                    .padding(.horizontal, 11)
+                    .padding(.vertical, 8)
+                    .background(Theme.windowBG,
+                                in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .strokeBorder(focus == .prompt
+                                          ? Theme.amber.opacity(0.85)
+                                          : Color.white.opacity(0.10),
+                                          lineWidth: 1)
+                    )
+                    .animation(.snappy(duration: 0.2), value: focus == .prompt)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        }
+        .padding(20)
+    }
+
+    private var validIcon: String {
+        NSImage(systemSymbolName: persona.icon, accessibilityDescription: nil) != nil
+            ? persona.icon : "person"
+    }
+}
+
+// MARK: - Presets (§1.4b)
+
+/// Global generation defaults and named presets in one place. The "Generation
+/// defaults" section edits the `@AppStorage` sampling params applied to every
+/// conversation; the "Presets" section manages named bundles applied from the chat
+/// header's sliders button.
+private struct PresetsSettingsTab: View {
+    @Environment(\.modelContext) private var context
+    @Query(sort: \Preset.sortOrder) private var presets: [Preset]
     @AppStorage("globalSamplingJSON") private var json = "{}"
     @State private var params = SamplingParams()
 
@@ -352,9 +477,35 @@ private struct SamplingSettingsTab: View {
 
                     SamplingControls(params: $params)
                 }
+
+                SettingsSection("Presets") {
+                    VStack(spacing: 12) {
+                        ForEach(presets) { preset in
+                            PresetSettingsRow(preset: preset) {
+                                context.delete(preset)
+                                try? context.save()
+                            }
+                        }
+                        Button(action: addPreset) {
+                            Label("Add Preset", systemImage: "plus")
+                                .font(Theme.metric(12))
+                                .foregroundStyle(Theme.amber)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Add a preset")
+                        .padding(.top, 4)
+
+                        Text("Apply a preset to a chat from the sliders button in its header.")
+                            .font(Theme.metric(10))
+                            .foregroundStyle(Theme.textFaint)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
             }
             .padding(24)
+            .hideScrollIndicators()
         }
+        .scrollIndicators(.hidden)
         .clipped()
         .onAppear {
             params = (try? JSONDecoder().decode(SamplingParams.self, from: Data(json.utf8))) ?? SamplingParams()
@@ -362,43 +513,6 @@ private struct SamplingSettingsTab: View {
         .onChange(of: params) { _, new in
             json = String(decoding: (try? JSONEncoder().encode(new)) ?? Data("{}".utf8), as: UTF8.self)
         }
-    }
-}
-
-// MARK: - Presets (§1.4b)
-
-/// CRUD for reusable generation presets — a name, optional system prompt, and a set
-/// of sampling controls. Apply them to a conversation from the chat header.
-private struct PresetsSettingsTab: View {
-    @Environment(\.modelContext) private var context
-    @Query(sort: \Preset.sortOrder) private var presets: [Preset]
-
-    var body: some View {
-        ScrollView {
-            VStack(spacing: 12) {
-                ForEach(presets) { preset in
-                    PresetSettingsRow(preset: preset) {
-                        context.delete(preset)
-                        try? context.save()
-                    }
-                }
-                Button(action: addPreset) {
-                    Label("Add Preset", systemImage: "plus")
-                        .font(Theme.metric(12))
-                        .foregroundStyle(Theme.amber)
-                }
-                .buttonStyle(.plain)
-                .help("Add a preset")
-                .padding(.top, 4)
-
-                Text("Apply a preset to a chat from the sliders button in its header.")
-                    .font(Theme.metric(10))
-                    .foregroundStyle(Theme.textFaint)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .padding(24)
-        }
-        .clipped()
     }
 
     private func addPreset() {
@@ -579,7 +693,9 @@ private struct AppearanceSettingsTab: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(24)
+            .hideScrollIndicators()
         }
+        .scrollIndicators(.hidden)
         .clipped()
     }
 }
@@ -694,11 +810,14 @@ private struct SettingsSection<Content: View>: View {
 private struct ServerSettingsRow: View {
     @Bindable var server: Server
     let onDelete: () -> Void
+    var autoExpand: Bool = false
     @FocusState private var focus: Field?
     @State private var apiKey = ""
     @State private var isKeyRevealed = false
     @State private var needsAuth = false
+    @State private var isExpanded = false
     @Environment(\.modelContext) private var modelContext
+    @Environment(ServerRegistry.self) private var registry
     private let keychain = KeychainStore()
     private var keychainAccount: String { Endpoint.keychainAccount(for: server) }
 
@@ -706,12 +825,17 @@ private struct ServerSettingsRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
+            // Header: always visible — tap to expand/collapse
             HStack(spacing: 8) {
-                TextField("Server name", text: $server.label)
-                    .textFieldStyle(.plain)
-                    .font(Theme.mono(13, weight: .semibold))
-                    .foregroundStyle(Theme.textHi)
-                    .focused($focus, equals: .label)
+                StatusLED(status: registry.status(for: server))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(server.label.isEmpty ? "Unnamed" : server.label)
+                        .font(Theme.mono(13, weight: .semibold))
+                        .foregroundStyle(Theme.textHi)
+                    Text(verbatim: "\(server.host.isEmpty ? "—" : server.host):\(server.port)")
+                        .font(Theme.metric(10))
+                        .foregroundStyle(Theme.textFaint)
+                }
                 Spacer(minLength: 8)
                 runtimePicker
                 Button(action: onDelete) {
@@ -721,129 +845,149 @@ private struct ServerSettingsRow: View {
                 }
                 .buttonStyle(.plain)
                 .help("Remove this server")
-            }
-
-            // Local runtimes (LM Studio, llama.cpp/llama-swap, oMLX) are all addressed by host:port.
-            HStack(alignment: .bottom, spacing: 12) {
-                FieldGroup(caption: "Host") {
-                    TextField("hostname or IP", text: $server.host)
-                        .textFieldStyle(.plain)
-                        .focused($focus, equals: .host)
-                        .fieldChrome(focused: focus == .host)
-                        .onSubmit { server.host = Server.normalizedHost(server.host) }
-                }
-
-                FieldGroup(caption: "Port") {
-                    TextField("0000", value: $server.port, format: .number.grouping(.never))
-                        .textFieldStyle(.plain)
-                        .focused($focus, equals: .port)
-                        .fieldChrome(focused: focus == .port)
-                        .frame(width: 72)
-                }
-                .fixedSize()
-            }
-
-            // Live "is it working?" feedback — re-probes when host/port/runtime/key change.
-            ServerProbeRow(server: server, keyHint: apiKey, onNeedsAuth: { needsAuth = $0 })
-
-            // Shown only once the server actually asks for auth (401), or when a key
-            // is already set — so the common no-auth case stays uncluttered.
-            if needsAuth || !apiKey.isEmpty {
-                FieldGroup(caption: "API key") {
-                    HStack(spacing: 0) {
-                        Group {
-                            if isKeyRevealed { TextField("the key this server expects", text: $apiKey) }
-                            else { SecureField("the key this server expects", text: $apiKey) }
-                        }
-                        .textFieldStyle(.plain)
-                        .focused($focus, equals: .key)
-                        Button { isKeyRevealed.toggle() } label: {
-                            Image(systemName: isKeyRevealed ? "eye.slash" : "eye")
-                                .font(.system(size: 10)).foregroundStyle(Theme.textLo).padding(.trailing, 4)
-                        }
-                        .buttonStyle(.plain)
-                        .help(isKeyRevealed ? "Hide key" : "Reveal key")
-                    }
-                    .fieldChrome(focused: focus == .key)
-                }
-                .transition(.opacity)
-            }
-
-            FieldGroup(caption: "Agent URL") {
-                TextField("http://host:9099  ·  optional", text: Binding(
-                    get: { server.metricsAgentURL ?? "" },
-                    set: { server.metricsAgentURL = $0.isEmpty ? nil : $0 }
-                ))
-                .textFieldStyle(.plain)
-                .focused($focus, equals: .agent)
-                .fieldChrome(focused: focus == .agent)
-            }
-
-            Text("Optional — a modelo-tap GPU agent on this box. Streams VRAM/power/temp to the Status dashboard. See modelo-tap/README.md.")
-                .font(Theme.metric(10))
-                .foregroundStyle(Theme.textFaint)
-                .fixedSize(horizontal: false, vertical: true)
-
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Read this Mac's GPU (macmon)").font(Theme.metric(12)).foregroundStyle(Theme.textMid)
-                    Text("For a server running on this Apple-Silicon Mac — shows local GPU on Status + the chat inspector. Requires the macmon CLI.")
-                        .font(Theme.metric(10)).foregroundStyle(Theme.textFaint)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer()
-                PillToggle(isOn: $server.localGPU)
-                    .help("Use the local macmon tool for this Mac's GPU metrics")
-            }
-
-            FieldGroup(caption: "Prometheus URL") {
-                TextField("http://host:8000/metrics  ·  optional", text: Binding(
-                    get: { server.prometheusURL ?? "" },
-                    set: { server.prometheusURL = $0.isEmpty ? nil : $0 }
-                ))
-                .textFieldStyle(.plain)
-                .focused($focus, equals: .prometheus)
-                .fieldChrome(focused: focus == .prometheus)
-            }
-
-            Text("Optional — a backend's Prometheus /metrics (vLLM, llama.cpp, llama-swap). Shows running/queued requests and KV-cache use on the Status dashboard.")
-                .font(Theme.metric(10))
-                .foregroundStyle(Theme.textFaint)
-                .fixedSize(horizontal: false, vertical: true)
-
-            // MARK: - Context Window (§7)
-
-            SettingsSection("Context Window") {
-                Text("Per-model context lengths. Set when the API doesn't report `max_context_length` (e.g. llama-swap, /v1/models fallback). The chat's context bar reads these first.")
-                    .font(Theme.metric(10))
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(Theme.textFaint)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                    .animation(.easeOut(duration: 0.18), value: isExpanded)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture { withAnimation(.easeOut(duration: 0.18)) { isExpanded.toggle() } }
+            .help(isExpanded ? "Collapse server" : "Edit server")
 
-                if server.contextLengthOverrides.isEmpty {
-                    Button(action: addContextWindow) {
-                        Label("Add Context Window", systemImage: "plus")
-                            .font(Theme.metric(12))
-                            .foregroundStyle(Theme.amber)
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 14) {
+                    TextField("Server name", text: $server.label)
+                        .textFieldStyle(.plain)
+                        .font(Theme.mono(13, weight: .semibold))
+                        .foregroundStyle(Theme.textHi)
+                        .focused($focus, equals: .label)
+
+                    // Local runtimes (LM Studio, llama.cpp/llama-swap, oMLX) are all addressed by host:port.
+                    HStack(alignment: .bottom, spacing: 12) {
+                        FieldGroup(caption: "Host") {
+                            TextField("hostname or IP", text: $server.host)
+                                .textFieldStyle(.plain)
+                                .focused($focus, equals: .host)
+                                .fieldChrome(focused: focus == .host)
+                                .onSubmit { server.host = Server.normalizedHost(server.host) }
+                        }
+
+                        FieldGroup(caption: "Port") {
+                            TextField("0000", value: $server.port, format: .number.grouping(.never))
+                                .textFieldStyle(.plain)
+                                .focused($focus, equals: .port)
+                                .fieldChrome(focused: focus == .port)
+                                .frame(width: 72)
+                        }
+                        .fixedSize()
                     }
-                    .buttonStyle(.plain)
-                    .padding(.top, 4)
-                } else {
-                    List {
-                        ForEach(server.contextLengthOverrides) { override in
-                            contextWindowRow(override)
+
+                    // Live "is it working?" feedback — re-probes when host/port/runtime/key change.
+                    ServerProbeRow(server: server, keyHint: apiKey, onNeedsAuth: { needsAuth = $0 })
+
+                    // Shown only once the server actually asks for auth (401), or when a key
+                    // is already set — so the common no-auth case stays uncluttered.
+                    if needsAuth || !apiKey.isEmpty {
+                        FieldGroup(caption: "API key") {
+                            HStack(spacing: 0) {
+                                Group {
+                                    if isKeyRevealed { TextField("the key this server expects", text: $apiKey) }
+                                    else { SecureField("the key this server expects", text: $apiKey) }
+                                }
+                                .textFieldStyle(.plain)
+                                .focused($focus, equals: .key)
+                                Button { isKeyRevealed.toggle() } label: {
+                                    Image(systemName: isKeyRevealed ? "eye.slash" : "eye")
+                                        .font(.system(size: 10)).foregroundStyle(Theme.textLo).padding(.trailing, 4)
+                                }
+                                .buttonStyle(.plain)
+                                .help(isKeyRevealed ? "Hide key" : "Reveal key")
+                            }
+                            .fieldChrome(focused: focus == .key)
+                        }
+                        .transition(.opacity)
+                    }
+
+                    FieldGroup(caption: "Agent URL") {
+                        TextField("http://host:9099  ·  optional", text: Binding(
+                            get: { server.metricsAgentURL ?? "" },
+                            set: { server.metricsAgentURL = $0.isEmpty ? nil : $0 }
+                        ))
+                        .textFieldStyle(.plain)
+                        .focused($focus, equals: .agent)
+                        .fieldChrome(focused: focus == .agent)
+                    }
+
+                    Text("Optional — a modelo-tap GPU agent on this box. Streams VRAM/power/temp to the Status dashboard. See modelo-tap/README.md.")
+                        .font(Theme.metric(10))
+                        .foregroundStyle(Theme.textFaint)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Read this Mac's GPU (macmon)").font(Theme.metric(12)).foregroundStyle(Theme.textMid)
+                            Text("For a server running on this Apple-Silicon Mac — shows local GPU on Status + the chat inspector. Requires the macmon CLI.")
+                                .font(Theme.metric(10)).foregroundStyle(Theme.textFaint)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer()
+                        PillToggle(isOn: $server.localGPU)
+                            .help("Use the local macmon tool for this Mac's GPU metrics")
+                    }
+
+                    FieldGroup(caption: "Prometheus URL") {
+                        TextField("http://host:8000/metrics  ·  optional", text: Binding(
+                            get: { server.prometheusURL ?? "" },
+                            set: { server.prometheusURL = $0.isEmpty ? nil : $0 }
+                        ))
+                        .textFieldStyle(.plain)
+                        .focused($focus, equals: .prometheus)
+                        .fieldChrome(focused: focus == .prometheus)
+                    }
+
+                    Text("Optional — a backend's Prometheus /metrics (vLLM, llama.cpp, llama-swap). Shows running/queued requests and KV-cache use on the Status dashboard.")
+                        .font(Theme.metric(10))
+                        .foregroundStyle(Theme.textFaint)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    // MARK: - Context Window (§7)
+
+                    SettingsSection("Context Window") {
+                        Text("Per-model context lengths. Set when the API doesn't report `max_context_length` (e.g. llama-swap, /v1/models fallback). The chat's context bar reads these first.")
+                            .font(Theme.metric(10))
+                            .foregroundStyle(Theme.textFaint)
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        if server.contextLengthOverrides.isEmpty {
+                            Button(action: addContextWindow) {
+                                Label("Add Context Window", systemImage: "plus")
+                                    .font(Theme.metric(12))
+                                    .foregroundStyle(Theme.amber)
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.top, 4)
+                        } else {
+                            List {
+                                ForEach(server.contextLengthOverrides) { override in
+                                    contextWindowRow(override)
+                                }
+                            }
+                            .listStyle(.plain)
+                            .frame(height: CGFloat(min(server.contextLengthOverrides.count, 6) * 44 + 8))
+                            .hideScrollIndicators()
+
+                            Button(action: addContextWindow) {
+                                Label("Add Context Window", systemImage: "plus")
+                                    .font(Theme.metric(12))
+                                    .foregroundStyle(Theme.amber)
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.top, 4)
                         }
                     }
-                    .listStyle(.plain)
-                    .frame(height: CGFloat(min(server.contextLengthOverrides.count, 6) * 44 + 8))
-
-                    Button(action: addContextWindow) {
-                        Label("Add Context Window", systemImage: "plus")
-                            .font(Theme.metric(12))
-                            .foregroundStyle(Theme.amber)
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.top, 4)
                 }
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
         .padding(16)
@@ -855,7 +999,10 @@ private struct ServerSettingsRow: View {
                 server.host = Server.normalizedHost(server.host)
             }
         }
-        .onAppear { apiKey = keychain.get(account: keychainAccount) ?? "" }
+        .onAppear {
+            apiKey = keychain.get(account: keychainAccount) ?? ""
+            if autoExpand { isExpanded = true }
+        }
         .onChange(of: apiKey) { _, newValue in
             keychain.set(newValue.isEmpty ? nil : newValue, account: keychainAccount)
         }
@@ -1084,24 +1231,34 @@ private struct CloudServerSettingsRow: View {
     @Bindable var server: Server
     let keychain: KeychainStore
     let onDelete: () -> Void
+    var autoExpand: Bool = false
 
     @State private var apiKey = ""
     @State private var isKeyRevealed = false
+    @State private var isExpanded = false
     @FocusState private var focus: Field?
+    @Environment(ServerRegistry.self) private var registry
 
     private enum Field { case label, url, key }
     private var keychainAccount: String { Endpoint.keychainAccount(for: server) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
+            // Header: always visible — tap to expand/collapse
             HStack(spacing: 8) {
-                TextField("Server name", text: $server.label)
-                    .textFieldStyle(.plain)
-                    .font(Theme.mono(13, weight: .semibold))
-                    .foregroundStyle(Theme.textHi)
-                    .focused($focus, equals: .label)
+                StatusLED(status: registry.status(for: server))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(server.label.isEmpty ? "Unnamed" : server.label)
+                        .font(Theme.mono(13, weight: .semibold))
+                        .foregroundStyle(Theme.textHi)
+                    Text(verbatim: server.host.isEmpty ? "not configured" : server.host)
+                        .font(Theme.metric(10))
+                        .foregroundStyle(Theme.textFaint)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
                 Spacer(minLength: 8)
-                Chip(text: "cloud api")
+                Chip(text: server.kind.displayName.lowercased())
                 Button(action: onDelete) {
                     Image(systemName: "trash")
                         .font(.system(size: 11))
@@ -1109,47 +1266,69 @@ private struct CloudServerSettingsRow: View {
                 }
                 .buttonStyle(.plain)
                 .help("Remove this endpoint")
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(Theme.textFaint)
+                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                    .animation(.easeOut(duration: 0.18), value: isExpanded)
             }
+            .contentShape(Rectangle())
+            .onTapGesture { withAnimation(.easeOut(duration: 0.18)) { isExpanded.toggle() } }
+            .help(isExpanded ? "Collapse endpoint" : "Edit endpoint")
 
-            FieldGroup(caption: "Base URL") {
-                TextField("https://api.together.xyz/v1", text: $server.host)
-                    .textFieldStyle(.plain)
-                    .focused($focus, equals: .url)
-                    .fieldChrome(focused: focus == .url)
-            }
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 14) {
+                    TextField("Server name", text: $server.label)
+                        .textFieldStyle(.plain)
+                        .font(Theme.mono(13, weight: .semibold))
+                        .foregroundStyle(Theme.textHi)
+                        .focused($focus, equals: .label)
 
-            FieldGroup(caption: "API Key") {
-                HStack(spacing: 0) {
-                    Group {
-                        if isKeyRevealed {
-                            TextField("sk-…", text: $apiKey)
-                        } else {
-                            SecureField("sk-…", text: $apiKey)
+                    FieldGroup(caption: "Base URL") {
+                        TextField("https://api.together.xyz/v1", text: $server.host)
+                            .textFieldStyle(.plain)
+                            .focused($focus, equals: .url)
+                            .fieldChrome(focused: focus == .url)
+                    }
+
+                    FieldGroup(caption: "API Key") {
+                        HStack(spacing: 0) {
+                            Group {
+                                if isKeyRevealed {
+                                    TextField("sk-…", text: $apiKey)
+                                } else {
+                                    SecureField("sk-…", text: $apiKey)
+                                }
+                            }
+                            .textFieldStyle(.plain)
+                            .focused($focus, equals: .key)
+
+                            Button { isKeyRevealed.toggle() } label: {
+                                Image(systemName: isKeyRevealed ? "eye.slash" : "eye")
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(Theme.textLo)
+                                    .padding(.trailing, 4)
+                            }
+                            .buttonStyle(.plain)
+                            .help(isKeyRevealed ? "Hide key" : "Reveal key")
                         }
+                        .fieldChrome(focused: focus == .key)
                     }
-                    .textFieldStyle(.plain)
-                    .focused($focus, equals: .key)
 
-                    Button { isKeyRevealed.toggle() } label: {
-                        Image(systemName: isKeyRevealed ? "eye.slash" : "eye")
-                            .font(.system(size: 10))
-                            .foregroundStyle(Theme.textLo)
-                            .padding(.trailing, 4)
-                    }
-                    .buttonStyle(.plain)
-                    .help(isKeyRevealed ? "Hide key" : "Reveal key")
+                    Text("Bearer token — stored in your Keychain. Models load once a valid key is set.")
+                        .font(Theme.metric(10))
+                        .foregroundStyle(Theme.textFaint)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .fieldChrome(focused: focus == .key)
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
-
-            Text("Bearer token — stored in your Keychain. Models load once a valid key is set.")
-                .font(Theme.metric(10))
-                .foregroundStyle(Theme.textFaint)
-                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(16)
         .panel(Theme.popoverBG)
-        .onAppear { apiKey = keychain.get(account: keychainAccount) ?? "" }
+        .onAppear {
+            apiKey = keychain.get(account: keychainAccount) ?? ""
+            if autoExpand { isExpanded = true }
+        }
         .onChange(of: apiKey) { _, newValue in
             keychain.set(newValue.isEmpty ? nil : newValue, account: keychainAccount)
         }
