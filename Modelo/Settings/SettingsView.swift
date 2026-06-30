@@ -19,7 +19,7 @@ struct SettingsView: View {
     @Query(sort: \Server.sortOrder) private var servers: [Server]
     @Query(sort: \Persona.sortOrder) private var personas: [Persona]
     private let keychain = KeychainStore()
-    @State private var selectedTab = "Endpoints"
+    @SceneStorage("settingsSelectedTab") private var selectedTab = "Endpoints"
     @State private var newlyAddedID: UUID?
     @State private var selectedPersonaID: Persona.ID?
 
@@ -378,13 +378,61 @@ private struct PersonaListRow: View {
     }
 }
 
+// MARK: - Icon picker grid (popover)
+
+private struct IconPickerGrid: View {
+    @Binding var selected: String
+    @Binding var isPresented: Bool
+
+    private static let icons: [String] = [
+        "person", "brain", "brain.head.profile", "sparkles", "bolt",
+        "wand.and.stars", "graduationcap", "pencil", "doc.text", "book",
+        "magnifyingglass", "terminal", "hammer", "wrench.and.screwdriver",
+        "cpu", "network", "globe", "shield", "lock", "key",
+        "lightbulb", "flame", "leaf", "heart", "star",
+        "music.note", "camera", "photo", "paintbrush", "chart.bar",
+        "figure.stand", "person.2", "person.crop.circle", "robot", "ant",
+        "airplane", "car", "bicycle", "ferry", "figure.run",
+        "cloud", "sun.max", "moon", "wind", "drop"
+    ]
+
+    private let columns = Array(repeating: GridItem(.fixed(36), spacing: 4), count: 8)
+
+    var body: some View {
+        LazyVGrid(columns: columns, spacing: 4) {
+            ForEach(Self.icons, id: \.self) { sym in
+                Button {
+                    selected = sym
+                    isPresented = false
+                } label: {
+                    Image(systemName: sym)
+                        .font(.system(size: 14))
+                        .foregroundStyle(selected == sym ? Theme.amber : Theme.textHi)
+                        .frame(width: 32, height: 32)
+                        .background(
+                            selected == sym
+                                ? Theme.amber.opacity(0.15)
+                                : Color.clear,
+                            in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        )
+                }
+                .buttonStyle(.plain)
+                .help(sym)
+            }
+        }
+        .padding(10)
+        .frame(width: 344)
+    }
+}
+
 // MARK: - Persona edit pane (right column)
 
 private struct PersonaEditPane: View {
     @Bindable var persona: Persona
     @FocusState private var focus: Field?
+    @State private var showIconPicker = false
 
-    private enum Field { case name, icon, tagline, prompt }
+    private enum Field { case name, tagline, prompt }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -397,17 +445,23 @@ private struct PersonaEditPane: View {
                         .frame(width: 160)
                 }
                 .fixedSize()
-                FieldGroup(caption: "Icon (SF Symbol)") {
-                    HStack(spacing: 8) {
-                        Image(systemName: validIcon)
+                FieldGroup(caption: "Icon") {
+                    Button {
+                        showIconPicker.toggle()
+                    } label: {
+                        Image(systemName: persona.icon.isEmpty ? "person" : persona.icon)
                             .font(.system(size: 15))
                             .foregroundStyle(Theme.amber)
-                            .frame(width: 18)
-                        TextField("e.g. brain", text: $persona.icon)
-                            .textFieldStyle(.plain)
-                            .focused($focus, equals: .icon)
-                            .fieldChrome(focused: focus == .icon)
-                            .frame(width: 120)
+                            .frame(width: 32, height: 28)
+                            .background(Theme.windowBG, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .popover(isPresented: $showIconPicker, arrowEdge: .bottom) {
+                        IconPickerGrid(selected: $persona.icon, isPresented: $showIconPicker)
                     }
                 }
                 .fixedSize()
@@ -447,66 +501,173 @@ private struct PersonaEditPane: View {
         }
         .padding(20)
     }
+}
 
-    private var validIcon: String {
-        NSImage(systemSymbolName: persona.icon, accessibilityDescription: nil) != nil
-            ? persona.icon : "person"
+// MARK: - Preset list row (right column)
+
+private struct PresetListRow: View {
+    let preset: Preset
+    let isSelected: Bool
+    let onTap: () -> Void
+    let onDelete: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(preset.name.isEmpty ? "Unnamed" : preset.name)
+                    .font(Theme.mono(12, weight: .semibold))
+                    .foregroundStyle(Theme.textHi)
+                    .lineLimit(1)
+                let summary = presetSummary
+                if !summary.isEmpty {
+                    Text(summary)
+                        .font(Theme.metric(10))
+                        .foregroundStyle(Theme.textLo)
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: 4)
+            Button(action: onDelete) {
+                Image(systemName: "trash")
+                    .font(.system(size: 10))
+                    .foregroundStyle(Theme.Palette.alert.opacity(0.65))
+            }
+            .buttonStyle(.plain)
+            .help("Delete preset")
+            .opacity(isSelected ? 1 : 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            isSelected ? Theme.amber.opacity(0.12) : Color.clear,
+            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(isSelected ? Theme.amber.opacity(0.35) : Color.clear, lineWidth: 1)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture { onTap() }
+    }
+
+    private var presetSummary: String {
+        let s = preset.sampling
+        var parts: [String] = []
+        if let t = s.temperature { parts.append(String(format: "temp %.1f", t)) }
+        if let k = s.maxTokens { parts.append(k >= 1000 ? "\(k / 1000)k" : "\(k)") }
+        return parts.joined(separator: " · ")
     }
 }
 
 // MARK: - Presets (§1.4b)
 
-/// Global generation defaults and named presets in one place. The "Generation
-/// defaults" section edits the `@AppStorage` sampling params applied to every
-/// conversation; the "Presets" section manages named bundles applied from the chat
-/// header's sliders button.
+/// Master-detail layout: editor on the left, saved-presets side menu on the right.
+/// `selectedPresetID == nil` means "Generation defaults" is selected.
 private struct PresetsSettingsTab: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \Preset.sortOrder) private var presets: [Preset]
     @AppStorage("globalSamplingJSON") private var json = "{}"
     @State private var params = SamplingParams()
+    @State private var selectedPresetID: Preset.ID?
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                SettingsSection("Generation defaults") {
-                    Text("Applied to every conversation unless it overrides them. A disabled control isn't sent — the server uses its own default.")
-                        .font(Theme.metric(10))
-                        .foregroundStyle(Theme.textFaint)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    SamplingControls(params: $params)
-                }
-
-                SettingsSection("Presets") {
-                    VStack(spacing: 12) {
-                        ForEach(presets) { preset in
-                            PresetSettingsRow(preset: preset) {
-                                context.delete(preset)
-                                try? context.save()
-                            }
+        HStack(spacing: 0) {
+            // Left: editor
+            Group {
+                if let selected = presets.first(where: { $0.id == selectedPresetID }) {
+                    PresetEditPane(preset: selected)
+                        .id(selected.id)
+                } else {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 14) {
+                            Text("Applied to every conversation unless it overrides them. A disabled control isn't sent — the server uses its own default.")
+                                .font(Theme.metric(10))
+                                .foregroundStyle(Theme.textFaint)
+                                .fixedSize(horizontal: false, vertical: true)
+                            SamplingControls(params: $params)
                         }
-                        Button(action: addPreset) {
-                            Label("Add Preset", systemImage: "plus")
-                                .font(Theme.metric(12))
-                                .foregroundStyle(Theme.amber)
-                        }
-                        .buttonStyle(.plain)
-                        .help("Add a preset")
-                        .padding(.top, 4)
-
-                        Text("Apply a preset to a chat from the sliders button in its header.")
-                            .font(Theme.metric(10))
-                            .foregroundStyle(Theme.textFaint)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(20)
                     }
+                    .scrollIndicators(.hidden)
                 }
             }
-            .padding(24)
-            .hideScrollIndicators()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            Divider().overlay(Theme.line)
+
+            // Right: side menu
+            VStack(spacing: 0) {
+                HStack(spacing: 10) {
+                    Image(systemName: "slider.horizontal.3")
+                        .font(.system(size: 13))
+                        .foregroundStyle(selectedPresetID == nil ? Theme.amber : Theme.textMute)
+                        .frame(width: 18)
+                    Text("Generation defaults")
+                        .font(Theme.mono(12, weight: .semibold))
+                        .foregroundStyle(Theme.textHi)
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(
+                    selectedPresetID == nil ? Theme.amber.opacity(0.12) : Color.clear,
+                    in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(selectedPresetID == nil ? Theme.amber.opacity(0.35) : Color.clear, lineWidth: 1)
+                )
+                .contentShape(Rectangle())
+                .onTapGesture { selectedPresetID = nil }
+
+                Divider().overlay(Theme.line).padding(.vertical, 8)
+
+                ScrollView {
+                    VStack(spacing: 4) {
+                        ForEach(presets) { preset in
+                            PresetListRow(
+                                preset: preset,
+                                isSelected: preset.id == selectedPresetID,
+                                onTap: { selectedPresetID = preset.id },
+                                onDelete: {
+                                    let deletingSelected = preset.id == selectedPresetID
+                                    context.delete(preset)
+                                    try? context.save()
+                                    if deletingSelected { selectedPresetID = nil }
+                                }
+                            )
+                        }
+                    }
+                }
+                .scrollIndicators(.hidden)
+                .frame(maxHeight: .infinity)
+
+                Button(action: addPreset) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 11, weight: .semibold))
+                        Text("Add Preset")
+                            .font(Theme.label(11))
+                    }
+                    .foregroundStyle(Theme.amber)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 9)
+                    .frame(maxWidth: .infinity)
+                    .panel(Theme.popoverBG, radius: 9, stroke: Theme.amber.opacity(0.3))
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 10)
+
+                Text("Apply from the sliders button in a chat header.")
+                    .font(Theme.metric(10))
+                    .foregroundStyle(Theme.textFaint)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 8)
+            }
+            .padding(16)
+            .frame(width: 240)
         }
-        .scrollIndicators(.hidden)
-        .clipped()
         .onAppear {
             params = (try? JSONDecoder().decode(SamplingParams.self, from: Data(json.utf8))) ?? SamplingParams()
         }
@@ -516,8 +677,48 @@ private struct PresetsSettingsTab: View {
     }
 
     private func addPreset() {
-        context.insert(Preset(name: "New Preset", sortOrder: presets.count))
+        let preset = Preset(name: "New Preset", sortOrder: presets.count)
+        context.insert(preset)
         try? context.save()
+        selectedPresetID = preset.id
+    }
+}
+
+// MARK: - Preset edit pane (left column)
+
+private struct PresetEditPane: View {
+    @Bindable var preset: Preset
+    @FocusState private var nameFocused: Bool
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                FieldGroup(caption: "Name") {
+                    TextField("Preset name", text: $preset.name)
+                        .textFieldStyle(.plain)
+                        .font(Theme.mono(13, weight: .semibold))
+                        .foregroundStyle(Theme.textHi)
+                        .focused($nameFocused)
+                        .fieldChrome(focused: nameFocused)
+                }
+
+                FieldGroup(caption: "System prompt (optional)") {
+                    TextField("Leave blank to keep the chat's own prompt",
+                              text: Binding(get: { preset.systemPrompt ?? "" },
+                                            set: { preset.systemPrompt = $0.isEmpty ? nil : $0 }),
+                              axis: .vertical)
+                        .textFieldStyle(.plain)
+                        .lineLimit(1...4)
+                        .fieldChrome(focused: false)
+                }
+
+                Eyebrow("Sampling", size: 9)
+                SamplingControls(params: Binding(get: { preset.sampling },
+                                                 set: { preset.sampling = $0 }))
+            }
+            .padding(20)
+        }
+        .scrollIndicators(.hidden)
     }
 }
 
@@ -734,45 +935,6 @@ private struct ThemeRow: View {
         }
         .buttonStyle(.plain)
         .help("Use the \(theme.label) theme")
-    }
-}
-
-private struct PresetSettingsRow: View {
-    @Bindable var preset: Preset
-    let onDelete: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                TextField("Preset name", text: $preset.name)
-                    .textFieldStyle(.plain)
-                    .font(Theme.mono(13, weight: .semibold))
-                    .foregroundStyle(Theme.textHi)
-                Spacer(minLength: 8)
-                Button(action: onDelete) {
-                    Image(systemName: "trash")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Theme.Palette.alert.opacity(0.7))
-                }
-                .buttonStyle(.plain)
-                .help("Remove this preset")
-            }
-
-            FieldGroup(caption: "System prompt (optional)") {
-                TextField("Leave blank to keep the chat's own prompt",
-                          text: Binding(get: { preset.systemPrompt ?? "" },
-                                        set: { preset.systemPrompt = $0.isEmpty ? nil : $0 }),
-                          axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .lineLimit(1...4)
-                    .fieldChrome(focused: false)
-            }
-
-            SamplingControls(params: Binding(get: { preset.sampling },
-                                             set: { preset.sampling = $0 }))
-        }
-        .padding(14)
-        .panel(Theme.fill, radius: Theme.Radius.card, stroke: Theme.line)
     }
 }
 

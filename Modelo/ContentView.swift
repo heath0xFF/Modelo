@@ -67,6 +67,16 @@ struct ContentView: View {
         return conversations.first { $0.persistentModelID == id }
     }
 
+    /// The console inspector shows live model metrics, so it's only meaningful on
+    /// chat-style routes. Hidden on Settings / Reports / Status, where it's useless
+    /// and (when open) shoves the window off-screen as it grows.
+    private var routeSupportsConsole: Bool {
+        switch route {
+        case .conversation, .launcher, .project, nil: true
+        case .status, .reports, .settings: false
+        }
+    }
+
     var body: some View {
         NavigationSplitView {
             SidebarView(route: $route, endpointFilter: $endpointFilter,
@@ -94,13 +104,15 @@ struct ContentView: View {
         .preferredColorScheme(Theme.active.scheme)
         .toolbarBackground(.hidden, for: .windowToolbar)
         .toolbar {
-            ToolbarItem {
-                Button {
-                    inspectorOpen.toggle()
-                } label: {
-                    Label("Console", systemImage: "chart.bar.xaxis")
+            if routeSupportsConsole {
+                ToolbarItem {
+                    Button {
+                        inspectorOpen.toggle()
+                    } label: {
+                        Label("Console", systemImage: "chart.bar.xaxis")
+                    }
+                    .help("Toggle inference console (⌘I)")
                 }
-                .help("Toggle inference console (⌘I)")
             }
         }
         .task(id: serverDiscoveryKey) {
@@ -108,7 +120,12 @@ struct ContentView: View {
             await refreshModels()
         }
         .onAppear { restoreRoute(); notifier.requestAuthorization(); updateForeground() }
-        .onChange(of: route) { saveRoute(route); syncPickedModel(); updateForeground() }
+        .onChange(of: route) {
+            saveRoute(route); syncPickedModel(); updateForeground()
+            // Close a console left open on a chat so it doesn't get stuck open
+            // (with no toolbar button to dismiss it) on Settings / Reports / Status.
+            if !routeSupportsConsole { inspectorOpen = false }
+        }
         .focusedSceneValue(\.modeloCommands, ModeloCommands(
             newChat: { newChat() },
             goToLauncher: { route = .launcher },

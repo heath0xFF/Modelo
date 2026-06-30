@@ -24,6 +24,18 @@ struct KeychainStore {
     /// current service, falls back to the legacy keychain and the legacy service name,
     /// migrating any hit to the current service + data-protection keychain.
     func get(account: String) -> String? {
+        Self.offMain { self._get(account: account) }
+    }
+
+    /// Stores `value` for `account` in the data-protection keychain, overwriting any
+    /// existing item. Passing nil deletes the item from both keychains.
+    func set(_ value: String?, account: String) {
+        Self.offMain { self._set(value, account: account) }
+    }
+
+    // MARK: - Off-main-thread implementation
+
+    private func _get(account: String) -> String? {
         if let value = readItem(account: account, service: service, dataProtection: true) { return value }
         // Fallbacks, in priority order — migrate on first success:
         //   1. current service, legacy keychain
@@ -36,7 +48,7 @@ struct KeychainStore {
         ]
         for (svc, dataProtection) in fallbacks {
             if let value = readItem(account: account, service: svc, dataProtection: dataProtection) {
-                set(value, account: account)
+                _set(value, account: account)
                 // Only remove the migrated source once the value is confirmed in the current
                 // service's data-protection keychain. If that write failed (e.g. the
                 // data-protection keychain is unavailable, as in an unsigned test process),
@@ -51,11 +63,9 @@ struct KeychainStore {
         return nil
     }
 
-    /// Stores `value` for `account` in the data-protection keychain, overwriting any
-    /// existing item. Passing nil deletes the item from both keychains.
-    func set(_ value: String?, account: String) {
+    private func _set(_ value: String?, account: String) {
         guard let value, let data = value.data(using: .utf8) else {
-            delete(account: account)
+            _delete(account: account)
             return
         }
         var query = baseQuery(account: account, service: service, dataProtection: true)
@@ -78,13 +88,22 @@ struct KeychainStore {
         }
     }
 
-    private func delete(account: String) {
+    private func _delete(account: String) {
         // Clear the secret from every place get() might find it — current and legacy
         // service, data-protection and legacy keychain — so a cleared key stays cleared.
         SecItemDelete(baseQuery(account: account, service: service, dataProtection: true) as CFDictionary)
         SecItemDelete(baseQuery(account: account, service: service, dataProtection: false) as CFDictionary)
         SecItemDelete(baseQuery(account: account, service: Self.legacyService, dataProtection: true) as CFDictionary)
         SecItemDelete(baseQuery(account: account, service: Self.legacyService, dataProtection: false) as CFDictionary)
+    }
+
+    /// Runs `work` off the main thread. If already off-main, runs inline. This keeps
+    /// SecItem* calls off the UI thread (Thread Performance Checker requirement) while
+    /// preserving the synchronous public API — Keychain ops are fast enough that
+    /// blocking the caller is acceptable.
+    private static func offMain<T>(_ work: () -> T) -> T {
+        guard Thread.isMainThread else { return work() }
+        return DispatchQueue.global(qos: .userInitiated).sync { work() }
     }
 
     private func readItem(account: String, service: String, dataProtection: Bool) -> String? {
