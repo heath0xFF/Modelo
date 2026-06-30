@@ -46,7 +46,9 @@ struct StatusView: View {
             }
             .padding(.horizontal, 28)
             .padding(.vertical, 24)
+            .hideScrollIndicators()
         }
+        .scrollIndicators(.hidden)
         .background(Theme.windowBG)
     }
 
@@ -223,6 +225,10 @@ private struct CompactServerCard: View {
             .help("Retry connection")
         case .unknown:
             Text("PROBING")
+                .font(.mono(9)).tracking(1)
+                .foregroundStyle(Theme.textDim)
+        case .needsKey:
+            Text("NO KEY")
                 .font(.mono(9)).tracking(1)
                 .foregroundStyle(Theme.textDim)
         }

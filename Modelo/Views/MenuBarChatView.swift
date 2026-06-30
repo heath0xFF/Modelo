@@ -144,7 +144,9 @@ struct MenuBarChatView: View {
                     Color.clear.frame(height: 1).id("scroll-bottom")
                 }
                 .padding(.vertical, 6)
+                .hideScrollIndicators()
             }
+            .scrollIndicators(.hidden)
             .onChange(of: streamingText) { proxy.scrollTo("scroll-bottom") }
             .onChange(of: messages.count) { proxy.scrollTo("scroll-bottom", anchor: .bottom) }
         }

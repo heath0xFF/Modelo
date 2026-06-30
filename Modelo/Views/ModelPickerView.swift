@@ -267,7 +267,9 @@ private struct ModelPickerList: View {
                     }
                 }
                 .padding(.horizontal, 8).padding(.top, 6).padding(.bottom, 8)
+                .hideScrollIndicators()
             }
+            .scrollIndicators(.hidden)
         }
     }
 

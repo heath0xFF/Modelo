@@ -2,7 +2,7 @@ import Foundation
 import SwiftData
 
 /// Reachability state for a server.
-enum ServerStatus: Equatable { case unknown, online, offline }
+enum ServerStatus: Equatable { case unknown, online, offline, needsKey }
 
 /// Holds live reachability status per server (keyed by `Server.persistentModelID`) and seeds
 /// the two known machines on first launch. The persisted `Server` rows live in

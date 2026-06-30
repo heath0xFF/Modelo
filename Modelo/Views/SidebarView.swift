@@ -58,8 +58,10 @@ struct SidebarView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 22)
+            .hideScrollIndicators()
         }
         .scrollContentBackground(.hidden)
+        .scrollIndicators(.hidden)
         .background(Theme.sidebarBG)
         .overlay(alignment: .trailing) {
             Rectangle().fill(Color.white.opacity(0.05)).frame(width: 1)

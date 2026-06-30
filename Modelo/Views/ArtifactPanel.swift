@@ -98,7 +98,9 @@ struct ArtifactPanel: View {
                     .textSelection(.enabled)
                     .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .hideScrollIndicators()
             }
+            .scrollIndicators(.hidden)
         } else if group.kind.isRenderable {
             ArtifactWebView(html: ArtifactHTML.document(for: current, dark: Theme.active.scheme == .dark))
         } else {   // rendered markdown
@@ -106,7 +108,9 @@ struct ArtifactPanel: View {
                 MarkdownText(content: current.content, fontSize: 14)
                     .padding(14)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .hideScrollIndicators()
             }
+            .scrollIndicators(.hidden)
         }
     }
 

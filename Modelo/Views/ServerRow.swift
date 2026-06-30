@@ -10,9 +10,10 @@ struct ServerRow: View {
     /// Spoken status so the color-only LED isn't lost to VoiceOver.
     private var statusLabel: String {
         switch status {
-        case .online:  "online"
-        case .offline: "offline"
-        case .unknown: "status unknown"
+        case .online:   "online"
+        case .offline:  "offline"
+        case .unknown:  "status unknown"
+        case .needsKey: "needs API key"
         }
     }
 
