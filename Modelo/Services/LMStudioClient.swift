@@ -67,6 +67,9 @@ final class LMStudioClient: ChatProvider {
             // Generic local OpenAI-compatible servers (llama.cpp/llama-swap, oMLX): no /api/v0.
             return try await fetch(path: "/v1/models", endpoint: endpoint)
                 .filter { !$0.isEmbeddingModel }
+        case .ollama:
+            return try await fetch(path: "/v1/models", endpoint: endpoint)
+                .filter { !$0.isEmbeddingModel }
         }
     }
 
@@ -108,6 +111,7 @@ final class LMStudioClient: ChatProvider {
         switch endpoint.kind {
         case .lmStudio, .llamaCpp, .oMLX: path = "/v1/models"
         case .cloudAPI, .openRouter: path = "/models"
+        case .ollama: path = "/v1/models"
         }
         guard let url = URL(string: "\(endpoint.baseURL)\(path)") else { return false }
         var request = URLRequest(url: url)
@@ -126,6 +130,7 @@ final class LMStudioClient: ChatProvider {
         switch endpoint.kind {
         case .lmStudio, .llamaCpp, .oMLX: path = "/v1/models"
         case .cloudAPI, .openRouter: path = "/models"
+        case .ollama: path = "/v1/models"
         }
         guard let url = URL(string: "\(endpoint.baseURL)\(path)") else { return .invalidURL }
         var request = URLRequest(url: url)
@@ -291,6 +296,7 @@ final class LMStudioClient: ChatProvider {
             switch endpoint.kind {
             case .lmStudio, .llamaCpp, .oMLX: chatPath = "/v1/chat/completions"
             case .cloudAPI, .openRouter: chatPath = "/chat/completions"
+            case .ollama: chatPath = "/v1/chat/completions"
             }
             guard let url = URL(string: "\(endpoint.baseURL)\(chatPath)") else {
                 throw ClientError.invalidURL

@@ -49,8 +49,9 @@ struct ContentView: View {
     /// user navigates to another chat — enabling concurrent chats.
     @State private var sessionStore = ChatSessionStore()
     /// Posts reply-finished notifications for chats the user isn't watching; tracks
-    /// which conversation is on screen so the foreground chat stays quiet.
-    @State private var notifier = ChatNotifier()
+    /// which conversation is on screen so the foreground chat stays quiet. Owned by
+    /// `ModeloApp` (so its notification delegate outlives this window) and injected.
+    @Environment(ChatNotifier.self) private var notifier
     @State private var pickedModel: DiscoveredModel?
     @State private var discovered: [DiscoveredModel] = []
     @State private var endpointFilter: UUID?
@@ -100,7 +101,6 @@ struct ContentView: View {
         // Shared across the sidebar and detail so a streaming turn survives chat
         // switches and the sidebar can discard a deleted conversation's session.
         .environment(sessionStore)
-        .environment(notifier)
         .preferredColorScheme(Theme.active.scheme)
         .toolbarBackground(.hidden, for: .windowToolbar)
         .toolbar {
@@ -119,13 +119,16 @@ struct ContentView: View {
             gpuMonitor.start(servers: servers)   // pick up agent-URL / macmon changes
             await refreshModels()
         }
-        .onAppear { restoreRoute(); notifier.requestAuthorization(); updateForeground() }
+        .onAppear { restoreRoute(); consumeTappedConversation(); notifier.requestAuthorization(); updateForeground() }
         .onChange(of: route) {
             saveRoute(route); syncPickedModel(); updateForeground()
             // Close a console left open on a chat so it doesn't get stuck open
             // (with no toolbar button to dismiss it) on Settings / Reports / Status.
             if !routeSupportsConsole { inspectorOpen = false }
         }
+        // A tapped reply notification routes here. Handled in onAppear too, so a tap
+        // that re-opens a closed window (menu-bar mode) still lands on the chat.
+        .onChange(of: notifier.tappedConversation) { consumeTappedConversation() }
         .focusedSceneValue(\.modeloCommands, ModeloCommands(
             newChat: { newChat() },
             goToLauncher: { route = .launcher },
@@ -247,6 +250,16 @@ struct ContentView: View {
         }) {
             pickedModel = match
         }
+    }
+
+    /// Navigates to the chat from a tapped notification, if one is pending, then
+    /// clears the signal so the same tap can't re-fire. The notifier is App-owned,
+    /// so a pending tap survives until a window is present to consume it — which is
+    /// what makes a tap work when the app was running menu-bar-only.
+    private func consumeTappedConversation() {
+        guard let id = notifier.tappedConversation else { return }
+        route = .conversation(id)
+        notifier.tappedConversation = nil
     }
 
     /// Tells the notifier which conversation is on screen, so a reply that finishes

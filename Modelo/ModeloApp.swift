@@ -12,6 +12,10 @@ struct ModeloApp: App {
     @State private var mcpManager = MCPServerManager()
     @State private var favoritesStore = FavoritesStore()
     @State private var projectStore = ProjectStore()
+    // Owned here, not in ContentView, so the notification-center delegate it holds
+    // outlives any window: the app keeps running menu-bar-only after the main window
+    // closes, and a notification tap must still route to the chat. Set up in init().
+    @State private var notifier = ChatNotifier()
     // Drives chat text size; matches the @AppStorage default used in the views.
     @AppStorage("messageFontSize") private var messageFontSize: Double = 15
     // Selected color theme (§3.5). Reading this in a scene body makes that scene
@@ -62,6 +66,13 @@ struct ModeloApp: App {
         Theme.applyStored(UserDefaults.standard.string(forKey: "themeID") ?? ThemeID.dark.rawValue)
         _registry = State(initialValue: registry)
 
+        // Register the notification-center delegate now, before launch finishes, so a
+        // tap that cold-launches the app reaches the delegate. The same instance is
+        // injected into the WindowGroup below.
+        let notifier = ChatNotifier()
+        notifier.registerDelegate()
+        _notifier = State(initialValue: notifier)
+
         // Reachability probe: single-shot short-timeout check (NOT fetchModels —
         // see Task 6 note on the double-fallback timeout). The probe receives a
         // Sendable `Endpoint` snapshot (built on the main actor in `checkOnce`),
@@ -83,6 +94,7 @@ struct ModeloApp: App {
                 .environment(favoritesStore)
                 .environment(projectStore)
                 .environment(reachabilityMonitor)
+                .environment(notifier)
                 .task { await startMonitoring() }
                 .task { mcpManager.startAll() }
                 .preferredColorScheme(palette.scheme)
