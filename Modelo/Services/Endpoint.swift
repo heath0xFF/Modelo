@@ -10,14 +10,16 @@ import SwiftData
 /// - `cloudAPI`: any OpenAI-compatible cloud endpoint (user-supplied HTTPS base URL, bearer auth).
 /// - `openRouter`: hardcoded OpenRouter cloud endpoint — user supplies only the API key.
 ///
-/// `lmStudio`, `llamaCpp`, and `oMLX` are *local* (self-hosted) — they run on hardware you
-/// control and can have a `modelo-tap` GPU agent next to them. Add new local runtimes
-/// (vLLM, sglang, …) as cases here; everything but LM Studio's `/api/v0` is generic local.
+/// `lmStudio`, `llamaCpp`, `oMLX`, and `ollama` are *local* (self-hosted) — they run on
+/// hardware you control and can have a `modelo-tap` GPU agent next to them. Add new local
+/// runtimes (vLLM, sglang, …) as cases here; everything but LM Studio's `/api/v0` is generic local.
 enum ServerKind: String, Codable, Sendable, CaseIterable {
     case lmStudio
     /// Raw value kept as "llamaSwap" so servers saved before the rename still deserialise.
     case llamaCpp = "llamaSwap"
     case oMLX
+    /// Local Ollama runtime — OpenAI-compatible /v1, default port 11434.
+    case ollama
     /// Raw value kept as "openRouter" so existing SwiftData records deserialise correctly.
     case cloudAPI = "openRouter"
     /// Dedicated OpenRouter endpoint — fixed base URL, user supplies only the API key.
@@ -27,8 +29,8 @@ enum ServerKind: String, Codable, Sendable, CaseIterable {
     /// a `modelo-tap` GPU agent. Cloud APIs (`cloudAPI`, `openRouter`) are managed endpoints that do not.
     var isLocal: Bool {
         switch self {
-        case .lmStudio, .llamaCpp, .oMLX: true
-        case .cloudAPI, .openRouter:      false
+        case .lmStudio, .llamaCpp, .oMLX, .ollama: true
+        case .cloudAPI, .openRouter:                false
         }
     }
 
@@ -38,6 +40,7 @@ enum ServerKind: String, Codable, Sendable, CaseIterable {
         case .lmStudio:   return "LM Studio"
         case .llamaCpp:   return "llama.cpp"
         case .oMLX:       return "oMLX"
+        case .ollama:     return "Ollama"
         case .cloudAPI:   return "Cloud API"
         case .openRouter: return "OpenRouter"
         }
@@ -51,6 +54,7 @@ enum ServerKind: String, Codable, Sendable, CaseIterable {
         case .lmStudio:              return 1234
         case .llamaCpp:              return 8080
         case .oMLX:                  return 8000
+        case .ollama:                return 11434
         case .cloudAPI, .openRouter: return 0
         }
     }
