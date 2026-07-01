@@ -128,6 +128,7 @@ final class BenchmarkRunner {
                 }
             }
         } catch {
+            Log.tools.error("Benchmark stream failed: \(error.localizedDescription, privacy: .public)")
             return BenchmarkResult(success: false, ttft: 0, tokensPerSec: 0)
         }
         let now = Date()

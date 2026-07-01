@@ -4,6 +4,10 @@ import SwiftData
 @main
 struct ModeloApp: App {
     let container: ModelContainer
+    // Set when the store couldn't be opened and was moved aside (see makeContainer);
+    // drives a one-time launch alert telling the user where their data went.
+    let storeRecoveryBackupURL: URL?
+    @State private var showStoreRecoveryAlert = false
     @State private var registry = ServerRegistry()
     @State private var reachabilityMonitor: ReachabilityMonitor
     @State private var serverMonitor = ServerMonitor()
@@ -50,9 +54,14 @@ struct ModeloApp: App {
             }
         }
 
-        let config = ModelConfiguration(schema: schema, url: newStore)
-        let container = try! ModelContainer(for: schema, configurations: [config])
+        let (container, storeBackup) = Self.makeContainer(schema: schema, storeFolder: storeFolder, storeURL: newStore)
         self.container = container
+        storeRecoveryBackupURL = storeBackup
+        _showStoreRecoveryAlert = State(initialValue: storeBackup != nil)
+
+        // Subscribe to MetricKit so crashes/hangs from previous sessions get logged
+        // and archived on this launch (they'd otherwise vanish without a trace).
+        CrashReporter.shared.start()
 
         let ctx = ModelContext(container)
         let registry = ServerRegistry()
@@ -106,6 +115,11 @@ struct ModeloApp: App {
                             window.titlebarAppearsTransparent = true
                         }
                     }
+                }
+                .alert("Chat database was reset", isPresented: $showStoreRecoveryAlert) {
+                    Button("OK") { }
+                } message: {
+                    Text("The previous database couldn't be opened, so a fresh one was created. Your old data was preserved at:\n\(storeRecoveryBackupURL?.path ?? "")")
                 }
         }
         .defaultSize(width: 1200, height: 740)
@@ -174,6 +188,57 @@ struct ModeloApp: App {
                 .id(themeID)
         }
         .windowResizability(.contentSize)
+    }
+
+    /// Opens the SwiftData container, recovering from an unopenable store instead of
+    /// crashing. (This was a `try!`: any open failure — e.g. a failed schema migration
+    /// after a model change — killed the app at launch with no message at all.)
+    ///
+    /// Recovery moves the broken store files aside (never deletes them) and retries
+    /// with a fresh store. If even the fresh store fails, the app still terminates,
+    /// but the cause is now in the unified log first.
+    /// - Returns: The container, plus the backup folder if recovery happened (so the
+    ///   UI can tell the user where their previous data went).
+    /// - Note: Internal (not private) so `StoreRecoveryTests` can exercise the
+    ///   recovery path against a temp folder.
+    static func makeContainer(schema: Schema, storeFolder: URL, storeURL: URL) -> (ModelContainer, backupURL: URL?) {
+        let config = ModelConfiguration(schema: schema, url: storeURL)
+        do {
+            return (try ModelContainer(for: schema, configurations: [config]), nil)
+        } catch {
+            Log.data.fault("Failed to open store at \(storeURL.path, privacy: .public): \(error.localizedDescription, privacy: .public)")
+        }
+
+        // Move the whole store set aside with a timestamp so nothing is lost.
+        // (Colons render as "/" in Finder; the UUID suffix keeps rapid re-launches
+        // from colliding on a same-second folder name.)
+        let stamp = ISO8601DateFormatter().string(from: .now).replacingOccurrences(of: ":", with: "-")
+        let backupFolder = storeFolder.appending(path: "Modelo.store.broken-\(stamp)-\(UUID().uuidString.prefix(8))",
+                                                 directoryHint: .isDirectory)
+        do {
+            try FileManager.default.createDirectory(at: backupFolder, withIntermediateDirectories: true)
+            for suffix in ["", "-wal", "-shm"] {
+                let src = storeFolder.appending(path: "Modelo.store\(suffix)")
+                if FileManager.default.fileExists(atPath: src.path) {
+                    try FileManager.default.moveItem(at: src, to: backupFolder.appending(path: "Modelo.store\(suffix)"))
+                }
+            }
+        } catch {
+            // If the broken store can't be moved aside, a retry at the same URL just
+            // hits the same corrupt file — there is nothing safe to run with, and
+            // claiming recovery (or showing the backup alert) would be a lie.
+            Log.data.fault("Could not move the broken store aside: \(error.localizedDescription, privacy: .public)")
+            fatalError("Cannot back up the unopenable SwiftData store: \(error)")
+        }
+
+        do {
+            let container = try ModelContainer(for: schema, configurations: [config])
+            Log.data.error("Recovered with a fresh store; previous data moved to \(backupFolder.path, privacy: .public)")
+            return (container, backupFolder)
+        } catch {
+            Log.data.fault("Fresh store also failed to open: \(error.localizedDescription, privacy: .public)")
+            fatalError("Cannot open or recreate the SwiftData store: \(error)")
+        }
     }
 
     @MainActor private func startMonitoring() async {

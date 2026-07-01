@@ -94,6 +94,7 @@ final class MCPServerManager {
             clients[config.id] = client
             connectionErrors.removeValue(forKey: config.id)
         } catch {
+            Log.mcp.error("MCP server \(config.name, privacy: .public) failed to connect: \(error.localizedDescription, privacy: .public)")
             connectionErrors[config.id] = error.localizedDescription
         }
         await rebuildTools()

@@ -135,7 +135,7 @@ final class ChatSession {
         } else {
             conversation.appendToPath(userMsg)
         }
-        try? context.save()
+        context.saveOrLog()
 
         await runTurn(in: conversation, server: server,
                       modelSupportsTools: modelSupportsTools, sampling: sampling,
@@ -161,7 +161,7 @@ final class ChatSession {
         // back through the same user parent, so the model re-answers the same prompt.
         let fresh = Message(role: .assistant, content: "")
         conversation.branch(fresh, asSiblingOf: target)
-        try? context.save()
+        context.saveOrLog()
 
         await runTurn(in: conversation, server: server,
                       modelSupportsTools: modelSupportsTools, sampling: sampling,
@@ -219,7 +219,7 @@ final class ChatSession {
                 conversation.appendToPath(assistant)
             }
             lastAssistant = assistant
-            try? context.save()
+            context.saveOrLog()
 
             var toolCalls: [ToolCall] = []
             var roundCompletion = 0
@@ -272,12 +272,13 @@ final class ChatSession {
                     assistant.content += pendingContent
                 }
             } catch {
+                Log.chat.error("Turn failed: \(error.localizedDescription, privacy: .public)")
                 errorText = (error as? ClientError)?.errorDescription ?? error.localizedDescription
                 if assistant.content.isEmpty && assistant.toolCallsJSON == nil {
                     conversation.dropLeaf(assistant)
                     context.delete(assistant)
                 }
-                try? context.save()
+                context.saveOrLog()
                 return
             }
 
@@ -321,7 +322,7 @@ final class ChatSession {
                 let result = await registry.execute(name: call.name, argumentsJSON: call.arguments)
                 appendToolResult(result, call: call, in: conversation)
             }
-            try? context.save()
+            context.saveOrLog()
 
             round += 1
             if round >= maxToolRounds {
@@ -338,7 +339,7 @@ final class ChatSession {
                 conversation.dropLeaf(last)
                 context.delete(last)
             }
-            try? context.save()
+            context.saveOrLog()
             return
         }
 
@@ -356,7 +357,7 @@ final class ChatSession {
         // persistentModelID (the id assigned before the first save was temporary),
         // so branch navigation resolves it instead of falling back to date order.
         if let lastAssistant { conversation.activeLeaf = lastAssistant }
-        try? context.save()
+        context.saveOrLog()
 
         recorder.record(
             modelID: conversation.modelID, serverLabel: server.label,
@@ -473,6 +474,7 @@ final class ChatSession {
                 if case .delta(let t) = event { raw += t }
             }
         } catch {
+            Log.chat.error("Compaction stream failed: \(error.localizedDescription, privacy: .public)")
             return .failed  // best-effort; leave the conversation uncompacted
         }
 
@@ -480,7 +482,7 @@ final class ChatSession {
         guard !summary.isEmpty, conversation.modelContext != nil else { return .failed }
         conversation.summary = summary
         conversation.summaryThrough = cutoff
-        try? context.save()
+        context.saveOrLog()
         return .compacted(turns: toSummarize.count)
     }
 
@@ -521,6 +523,7 @@ final class ChatSession {
                 if case .delta(let t) = event { raw += t }
             }
         } catch {
+            Log.chat.error("Title generation stream failed: \(error.localizedDescription, privacy: .public)")
             return // best-effort; leave untitled
         }
 
@@ -530,7 +533,7 @@ final class ChatSession {
         // @Model loses its `modelContext`, and writing to it would be pointless.
         guard !Task.isCancelled, conversation.modelContext != nil else { return }
         conversation.title = title
-        try? context.save()
+        context.saveOrLog()
     }
 
     /// Normalizes a model's title output: drops any `<think>…</think>` reasoning,
