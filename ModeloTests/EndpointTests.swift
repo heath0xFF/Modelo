@@ -30,8 +30,8 @@ final class EndpointTests: XCTestCase {
         XCTAssertEqual(ServerKind.openRouter.rawValue, "openRouterFixed")
     }
 
-    func test_serverKind_localCases_areThreeRuntimes() {
-        XCTAssertEqual(ServerKind.localCases, [.lmStudio, .llamaCpp, .oMLX])
+    func test_serverKind_localCases_areTheLocalRuntimes() {
+        XCTAssertEqual(ServerKind.localCases, [.lmStudio, .llamaCpp, .oMLX, .ollama])
         XCTAssertTrue(ServerKind.oMLX.isLocal)
         XCTAssertFalse(ServerKind.cloudAPI.isLocal)
     }
