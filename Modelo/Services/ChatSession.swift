@@ -94,8 +94,11 @@ final class ChatSession {
     private let recorder: UsageRecorder
     private let keychain: KeychainStore
     private let registry: ToolRegistry
-    /// Appended to every request's system prompt (e.g. the artifact instructions, §2.4).
-    private let systemSuffix: String?
+    /// Produces the text appended to every request's system prompt (e.g. the artifact
+    /// instructions §2.4, the memory index). Re-evaluated at the top of every round so
+    /// a memory saved mid-turn — or edited in Settings — is in the prompt next round
+    /// without rebuilding the session.
+    private let systemSuffix: @MainActor () -> String?
     /// The best-effort title run, tracked so it can be cancelled when the view
     /// goes away (e.g. the user switches conversations mid-titling).
     private var titleTask: Task<Void, Never>?
@@ -103,7 +106,7 @@ final class ChatSession {
     init(client: any ChatProvider, context: ModelContext, recorder: UsageRecorder,
          keychain: KeychainStore = KeychainStore(),
          registry: ToolRegistry = ToolRegistry([]),
-         systemSuffix: String? = nil,
+         systemSuffix: @escaping @MainActor () -> String? = { nil },
          maxToolRounds: Int = defaultMaxToolRounds,
          yoloMode: Bool = false) {
         self.client = client
@@ -239,7 +242,7 @@ final class ChatSession {
                 // just-appended empty assistant is dropped by wireKeep.
                 let wire = conversation.wireContext()
                 let toolSpecs = activeToolSpecs(active: toolsActive, progressive: progressive, query: queryText)
-                let system = [wire.system, systemSuffix]
+                let system = [wire.system, systemSuffix()]
                     .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "\n\n")
                 let stream = client.streamChat(
                     endpoint: endpoint, modelID: conversation.modelID,
@@ -405,7 +408,7 @@ final class ChatSession {
         guard active else { return nil }
         guard progressive else { return registry.specs() }
         let preselected = ToolSelector.select(catalog: registry.catalog(), query: query, limit: Self.preselectLimit)
-        let names = Set(preselected).union(revealedTools)
+        let names = Set(preselected).union(revealedTools).union(registry.alwaysVisibleNames())
         return registry.specs(named: names) + [ToolSpec(FindToolsTool())]
     }
 

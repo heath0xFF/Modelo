@@ -63,6 +63,7 @@ struct ChatView: View {
     @AppStorage(FSToolSettings.enabledKey) private var fsToolsEnabled = false
     @AppStorage(FSToolSettings.shellKey)   private var shellToolEnabled = false
     @AppStorage(FSToolSettings.rootKey)    private var fsToolsRoot = ""
+    @AppStorage(MemoryStore.enabledKey)    private var memoryEnabled = false
     @Query(sort: \Preset.sortOrder) private var presets: [Preset]
     @State private var showSampling = false
     @State private var showBenchmark = false
@@ -1018,11 +1019,26 @@ struct ChatView: View {
         // Expose ~/.agents skills via a use_skill tool (§3.7).
         let skills = AgentsLoader.loadSkills()
         if !skills.isEmpty { tools.append(UseSkillTool(skills: skills)) }
+        // Persistent memory (opt-in, Settings ▸ Memory). Project chats get both scopes.
+        var memoryScopes: [MemoryScope] = [.global]
+        if let path = conversation.projectPath, !path.isEmpty { memoryScopes.append(.project(path: path)) }
+        if memoryEnabled {
+            tools += [SaveMemoryTool(scopes: memoryScopes), ReadMemoryTool(scopes: memoryScopes)]
+        }
+        // The suffix closure re-reads the memory flag and files each round, so saves
+        // and Settings edits reach the prompt next turn with no session rebuild. Tool
+        // registration still follows the fsToolsEnabled precedent (rebuild to change).
+        let staticSuffix = combinedSystemSuffix
         let session = ChatSession(client: LMStudioClient.shared, context: context,
                                   recorder: UsageRecorder(context: context),
                                   keychain: keychain,
                                   registry: ToolRegistry(tools),
-                                  systemSuffix: combinedSystemSuffix,
+                                  systemSuffix: {
+                                      let memoryIndex = UserDefaults.standard.bool(forKey: MemoryStore.enabledKey)
+                                          ? MemoryStore.indexInjection(scopes: memoryScopes) : nil
+                                      let parts = [staticSuffix, memoryIndex].compactMap(\.self).filter { !$0.isEmpty }
+                                      return parts.isEmpty ? nil : parts.joined(separator: "\n\n")
+                                  },
                                   maxToolRounds: effectiveMaxRounds,
                                   yoloMode: effectiveYolo)
         // Notify when a reply finishes and the user has moved to another chat/app.

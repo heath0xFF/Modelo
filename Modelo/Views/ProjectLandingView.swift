@@ -9,6 +9,9 @@ struct ProjectLandingView: View {
 
     @State private var entries: [DirectoryEntry] = []
     @State private var loadError: String?
+    @State private var memories: [Memory] = []
+    @State private var showMemoryManager = false
+    @AppStorage(MemoryStore.enabledKey) private var memoryEnabled = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -65,6 +68,53 @@ struct ProjectLandingView: View {
                     .frame(maxWidth: 340)
                 }
 
+                // Project memory summary. Hidden when the feature is off and this
+                // project has nothing stored (nothing to review or clean up).
+                if memoryEnabled || !memories.isEmpty {
+                    VStack(alignment: .leading, spacing: 0) {
+                        HStack {
+                            Eyebrow("Memory", color: Theme.textDim)
+                            Spacer(minLength: 8)
+                            Button("Manage…") { showMemoryManager = true }
+                                .buttonStyle(.plain)
+                                .font(Theme.metric(11))
+                                .foregroundStyle(Theme.amber)
+                        }
+                        .padding(.bottom, 10)
+                        if memories.isEmpty {
+                            Text(memoryEnabled
+                                 ? "Nothing saved yet — the model saves project facts here with save_memory."
+                                 : "Memory is off (Settings ▸ Memory); saved memories are kept but not shown to models.")
+                                .font(Theme.metric(10))
+                                .foregroundStyle(Theme.textFaint)
+                                .fixedSize(horizontal: false, vertical: true)
+                        } else {
+                            ForEach(memories.prefix(4)) { memory in
+                                HStack(spacing: 8) {
+                                    Image(systemName: "brain")
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(Theme.textDim)
+                                        .frame(width: 14)
+                                    Text(memory.name)
+                                        .font(.mono(12))
+                                        .foregroundStyle(Theme.textSoft)
+                                        .lineLimit(1)
+                                }
+                                .padding(.vertical, 4)
+                            }
+                            if memories.count > 4 {
+                                Text("… and \(memories.count - 4) more")
+                                    .font(.mono(11))
+                                    .foregroundStyle(Theme.textFaint)
+                                    .padding(.top, 4)
+                            }
+                        }
+                    }
+                    .padding(16)
+                    .background(Theme.fill, in: RoundedRectangle(cornerRadius: Theme.Radius.control))
+                    .frame(maxWidth: 340)
+                }
+
                 // New Chat button
                 Button { onNewChat(project) } label: {
                     HStack(spacing: 8) {
@@ -90,7 +140,29 @@ struct ProjectLandingView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.Palette.panel)
-        .task { loadEntries() }
+        .task { loadEntries(); loadMemories() }
+        .sheet(isPresented: $showMemoryManager, onDismiss: loadMemories) {
+            VStack(spacing: 0) {
+                HStack {
+                    Text("Memories — \(project.name)")
+                        .font(Theme.mono(13, weight: .semibold))
+                        .foregroundStyle(Theme.textHi)
+                    Spacer()
+                    Button("Done") { showMemoryManager = false }
+                        .font(Theme.metric(11))
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+                Divider().overlay(Theme.line)
+                MemoryManagerView(scope: .project(path: project.path))
+            }
+            .frame(width: 700, height: 480)
+            .background(Theme.windowBG)
+        }
+    }
+
+    private func loadMemories() {
+        memories = MemoryStore.list(.project(path: project.path))
     }
 
     private func loadEntries() {

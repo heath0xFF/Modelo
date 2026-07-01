@@ -24,7 +24,7 @@ struct SettingsView: View {
     @State private var selectedPersonaID: Persona.ID?
 
     private static let tabTitles = ["Endpoints", "Personas",
-                                    "Presets", "Appearance", "Tools", "MCP Servers"]
+                                    "Presets", "Appearance", "Tools", "Memory", "MCP Servers"]
 
     private struct CloudPreset: Identifiable {
         var id: String { name }
@@ -69,6 +69,7 @@ struct SettingsView: View {
                 case "Presets":     PresetsSettingsTab()
                 case "Appearance":  AppearanceSettingsTab()
                 case "Tools":       toolsTab
+                case "Memory":      memoryTab
                 case "MCP Servers": mcpServersTab
                 default:            endpointsTab
                 }
@@ -238,6 +239,21 @@ struct SettingsView: View {
         }
         .scrollIndicators(.hidden)
         .clipped()
+    }
+
+    // MARK: Memory
+
+    /// Master toggle on top (off by default — one-off chats stay one-off), the
+    /// global-scope memory manager below. The manager stays usable while disabled
+    /// so stored memories can still be reviewed and cleaned up.
+    private var memoryTab: some View {
+        VStack(spacing: 0) {
+            MemoryEnableCard()
+                .padding(.horizontal, 24)
+                .padding(.vertical, 16)
+            Divider().overlay(Theme.line)
+            MemoryManagerView(scope: .global)
+        }
     }
 
     // MARK: MCP Servers
@@ -807,6 +823,30 @@ private struct GlobalToolsCard: View {
                 }
             }
             .toggleStyle(.switch)
+        }
+    }
+}
+
+/// Opt-in switch for persistent memory. When off, nothing is injected into any
+/// prompt and the memory tools aren't registered — zero context cost.
+private struct MemoryEnableCard: View {
+    @AppStorage(MemoryStore.enabledKey) private var enabled = false
+
+    var body: some View {
+        SettingsSection("Memory") {
+            VStack(alignment: .leading, spacing: 8) {
+                Toggle(isOn: $enabled) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Remember facts across conversations").font(Theme.metric(12)).foregroundStyle(Theme.textHi)
+                        Text("Models can save durable facts with save_memory and see a compact index of them in every chat. Project chats also get project-scoped memories.")
+                            .font(Theme.metric(10)).foregroundStyle(Theme.textFaint)
+                    }
+                }
+                .toggleStyle(.switch)
+                Text("Off by default — one-off conversations stay one-off. Costs a line of context per memory. Re-open a chat after changing.")
+                    .font(Theme.metric(10)).foregroundStyle(Theme.textFaint)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 }

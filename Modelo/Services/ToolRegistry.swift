@@ -26,6 +26,11 @@ struct ToolRegistry: Sendable {
         tools.values.filter { names.contains($0.name) }.map(ToolSpec.init)
     }
 
+    /// Tools that must survive progressive-disclosure trimming (e.g. the memory tools).
+    func alwaysVisibleNames() -> Set<String> {
+        Set(tools.values.filter(\.alwaysVisible).map(\.name))
+    }
+
     /// The approval preview for a mutating tool call, or nil if the tool runs without
     /// confirmation (read-only) or is unknown.
     func approvalPreview(name: String, argumentsJSON: String) -> ToolApprovalPreview? {
