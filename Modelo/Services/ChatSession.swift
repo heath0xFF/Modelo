@@ -24,6 +24,13 @@ final class ChatSession {
     /// notice. Configurable per session and seeded from the global default
     /// (Settings ▸ Tools); the owning view keeps it in sync with the setting.
     var maxToolRounds: Int
+    /// YOLO mode: mutating tool calls run without approval and `maxToolRounds`
+    /// is ignored. The owning view pushes the effective value (global OR per-chat).
+    /// Flipping it on mid-prompt releases a pending approval as a one-off grant
+    /// (`.once`) so turning YOLO off later restores prompting.
+    var yoloMode: Bool {
+        didSet { if yoloMode && !oldValue { respondToApproval(.once) } }
+    }
     /// Above this many registered tools, switch to progressive disclosure.
     static let progressiveThreshold = 8
     /// How many relevant tools to pre-select for the model each turn (progressive mode).
@@ -64,6 +71,7 @@ final class ChatSession {
     /// Suspend until the user approves/denies a mutating tool call. Returns whether to
     /// proceed, and remembers session-wide approvals so we don't ask again.
     private func requestApproval(toolName: String, preview: ToolApprovalPreview) async -> Bool {
+        if yoloMode { return true }
         if sessionApprovedTools.contains(toolName) { return true }
         let decision = await withTaskCancellationHandler {
             await withCheckedContinuation { (cont: CheckedContinuation<ApprovalDecision, Never>) in
@@ -96,7 +104,8 @@ final class ChatSession {
          keychain: KeychainStore = KeychainStore(),
          registry: ToolRegistry = ToolRegistry([]),
          systemSuffix: String? = nil,
-         maxToolRounds: Int = defaultMaxToolRounds) {
+         maxToolRounds: Int = defaultMaxToolRounds,
+         yoloMode: Bool = false) {
         self.client = client
         self.context = context
         self.recorder = recorder
@@ -104,6 +113,7 @@ final class ChatSession {
         self.registry = registry
         self.systemSuffix = systemSuffix
         self.maxToolRounds = maxToolRounds
+        self.yoloMode = yoloMode
     }
 
     /// Sends `text` in `conversation`, routed to `server`. Runs the agentic loop:
@@ -324,7 +334,7 @@ final class ChatSession {
             try? context.save()
 
             round += 1
-            if round >= maxToolRounds {
+            if !yoloMode && round >= maxToolRounds {
                 errorText = "Reached the tool-call limit (\(maxToolRounds)) for this turn."
                 break
             }

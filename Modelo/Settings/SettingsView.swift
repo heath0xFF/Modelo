@@ -221,6 +221,7 @@ struct SettingsView: View {
                 GlobalToolsCard()
                 FilesystemToolsCard()
                 ToolRoundsCard()
+                YoloCard()
                 ArtifactsCard()
                 KeyCard(caption: "Firecrawl API key",
                         placeholder: "fc-…",
@@ -743,8 +744,33 @@ private struct ToolRoundsCard: View {
                         Text("\(maxRounds)").font(.mono(13)).foregroundStyle(Theme.amber).monospacedDigit()
                     }
                 }
-                Text("Higher allows more complex multi-step tool use but can run longer. Applies to new chats immediately; open chats update live.")
+                Text("Higher allows more complex multi-step tool use but can run longer. Applies to new chats immediately; open chats update live. Ignored while YOLO mode is on.")
                     .font(Theme.metric(10)).foregroundStyle(Theme.textFaint)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+/// Global YOLO mode: auto-approves every mutating tool call and lifts the
+/// tool-round cap. `ChatView` observes the same key and ORs it with the
+/// per-conversation switch to drive `ChatSession.yoloMode`.
+private struct YoloCard: View {
+    @AppStorage("yoloModeEnabled") private var enabled = false
+
+    var body: some View {
+        SettingsSection("YOLO mode") {
+            VStack(alignment: .leading, spacing: 8) {
+                Toggle(isOn: $enabled) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Auto-approve all tool calls").font(Theme.metric(12)).foregroundStyle(Theme.textHi)
+                        Text("Writes, edits and shell commands run without asking, and the tool-call limit is removed.")
+                            .font(Theme.metric(10)).foregroundStyle(Theme.textFaint)
+                    }
+                }
+                .toggleStyle(.switch)
+                Text("The model can modify files and run commands unattended until it finishes or you press Stop. Only use in workspaces you trust. Can also be enabled per chat.")
+                    .font(Theme.metric(10)).foregroundStyle(Theme.Palette.alert)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
