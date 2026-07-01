@@ -440,7 +440,7 @@ struct ChatView: View {
                 }
                 Divider().overlay(Theme.line)
                 Stepper(value: Binding(get: { conversation.maxToolRoundsOverride ?? maxToolRounds },
-                                       set: { conversation.maxToolRoundsOverride = $0 }),
+                                       set: { conversation.maxToolRoundsOverride = $0 == maxToolRounds ? nil : $0 }),
                         in: 1...20) {
                     HStack(spacing: 8) {
                         VStack(alignment: .leading, spacing: 2) {
@@ -649,7 +649,8 @@ struct ChatView: View {
             }
 
             // Standing cue that this chat runs tools unattended (YOLO mode).
-            if effectiveYolo {
+            // Guard on supportsToolUse so the banner doesn't show on non-tool models.
+            if effectiveYolo && pickedModel?.model.supportsToolUse == true {
                 HStack(spacing: 8) {
                     Image(systemName: "bolt.fill")
                         .font(.system(size: 11))

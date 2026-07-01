@@ -211,7 +211,6 @@ final class ChatSessionTests: XCTestCase {
             await Task.yield()
         }
         XCTFail("never paused for approval")
-        throw XCTSkip("approval never arrived")
     }
 
     func test_send_yolo_autoApprovesMutatingTool() async throws {
