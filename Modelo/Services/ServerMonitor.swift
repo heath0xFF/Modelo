@@ -63,6 +63,6 @@ final class ServerMonitor {
         let anyHasState = models.contains { $0.state != nil }
         let toStore = (!anyHasState && loaded.isEmpty) ? [models.first].compactMap { $0 } : loaded
         // Always write the snapshot — even when empty — so unloaded models are cleared promptly.
-        snapshots[server.id] = ModelSnapshot(models: toStore)
+        snapshots[server.persistentModelID] = ModelSnapshot(models: toStore)
     }
 }

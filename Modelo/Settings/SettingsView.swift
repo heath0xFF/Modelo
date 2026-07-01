@@ -107,10 +107,14 @@ struct SettingsView: View {
                         endpointRow(for: server)
                             .id(server.id)
                     }
-                    // Local server is a single action; Cloud API fans out to provider presets.
+                    // Local fans out to per-runtime presets; Cloud API fans out to provider presets.
                     Menu {
-                        Button(action: addServer) {
-                            Label("Local server", systemImage: "server.rack")
+                        Menu("Local") {
+                            ForEach(ServerKind.localCases, id: \.self) { kind in
+                                Button { addLocalServer(kind: kind) } label: {
+                                    Label(kind.displayName, systemImage: localIcon(for: kind))
+                                }
+                            }
                         }
                         Menu("Cloud API") {
                             ForEach(Self.cloudPresets) { preset in
@@ -305,12 +309,23 @@ struct SettingsView: View {
         newlyAddedID = server.id
     }
 
-    private func addServer() {
+    private func addLocalServer(kind: ServerKind = .lmStudio) {
         let nextOrder = (servers.map(\.sortOrder).max() ?? 0) + 1
-        let server = Server(label: "New Server", host: "localhost", port: 1234, sortOrder: nextOrder)
+        let server = Server(label: kind.displayName, host: "localhost",
+                            port: kind.defaultPort, sortOrder: nextOrder, kind: kind)
         context.insert(server)
         try? context.save()
         newlyAddedID = server.id
+    }
+
+    private func localIcon(for kind: ServerKind) -> String {
+        switch kind {
+        case .lmStudio: return "server.rack"
+        case .llamaCpp: return "terminal"
+        case .oMLX:     return "cpu"
+        case .ollama:   return "cylinder"
+        default:        return "server.rack"
+        }
     }
 
     private func addPersona() {
@@ -1004,6 +1019,7 @@ private struct ServerSettingsRow: View {
     @State private var isKeyRevealed = false
     @State private var needsAuth = false
     @State private var isExpanded = false
+    @State private var showAdvanced = false
     @Environment(\.modelContext) private var modelContext
     @Environment(ServerRegistry.self) private var registry
     private let keychain = KeychainStore()
@@ -1071,6 +1087,8 @@ private struct ServerSettingsRow: View {
                         .fixedSize()
                     }
 
+                    LocalSetupHint(kind: server.kind)
+
                     // Live "is it working?" feedback — re-probes when host/port/runtime/key change.
                     ServerProbeRow(server: server, keyHint: apiKey, onNeedsAuth: { needsAuth = $0 })
 
@@ -1097,47 +1115,68 @@ private struct ServerSettingsRow: View {
                         .transition(.opacity)
                     }
 
-                    FieldGroup(caption: "Agent URL") {
-                        TextField("http://host:9099  ·  optional", text: Binding(
-                            get: { server.metricsAgentURL ?? "" },
-                            set: { server.metricsAgentURL = $0.isEmpty ? nil : $0 }
-                        ))
-                        .textFieldStyle(.plain)
-                        .focused($focus, equals: .agent)
-                        .fieldChrome(focused: focus == .agent)
-                    }
-
-                    Text("Optional — a modelo-tap GPU agent on this box. Streams VRAM/power/temp to the Status dashboard. See modelo-tap/README.md.")
-                        .font(Theme.metric(10))
+                    // Advanced: agent URL, macmon, Prometheus — hidden by default to keep the
+                    // common case clean. Auto-expands when any of these fields are already set.
+                    Button {
+                        withAnimation(.easeOut(duration: 0.18)) { showAdvanced.toggle() }
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: showAdvanced ? "chevron.down" : "chevron.right")
+                                .font(.system(size: 9, weight: .semibold))
+                            Text("Advanced")
+                                .font(Theme.label(9))
+                                .tracking(1.0)
+                        }
                         .foregroundStyle(Theme.textFaint)
-                        .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .buttonStyle(.plain)
 
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Read this Mac's GPU (macmon)").font(Theme.metric(12)).foregroundStyle(Theme.textMid)
-                            Text("For a server running on this Apple-Silicon Mac — shows local GPU on Status + the chat inspector. Requires the macmon CLI.")
-                                .font(Theme.metric(10)).foregroundStyle(Theme.textFaint)
+                    if showAdvanced {
+                        VStack(alignment: .leading, spacing: 14) {
+                            FieldGroup(caption: "Agent URL") {
+                                TextField("http://host:9099  ·  optional", text: Binding(
+                                    get: { server.metricsAgentURL ?? "" },
+                                    set: { server.metricsAgentURL = $0.isEmpty ? nil : $0 }
+                                ))
+                                .textFieldStyle(.plain)
+                                .focused($focus, equals: .agent)
+                                .fieldChrome(focused: focus == .agent)
+                            }
+
+                            Text("Optional — a modelo-tap GPU agent on this box. Streams VRAM/power/temp to the Status dashboard. See modelo-tap/README.md.")
+                                .font(Theme.metric(10))
+                                .foregroundStyle(Theme.textFaint)
+                                .fixedSize(horizontal: false, vertical: true)
+
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Read this Mac's GPU (macmon)").font(Theme.metric(12)).foregroundStyle(Theme.textMid)
+                                    Text("For a server running on this Apple-Silicon Mac — shows local GPU on Status + the chat inspector. Requires the macmon CLI.")
+                                        .font(Theme.metric(10)).foregroundStyle(Theme.textFaint)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                                Spacer()
+                                PillToggle(isOn: $server.localGPU)
+                                    .help("Use the local macmon tool for this Mac's GPU metrics")
+                            }
+
+                            FieldGroup(caption: "Prometheus URL") {
+                                TextField("http://host:8000/metrics  ·  optional", text: Binding(
+                                    get: { server.prometheusURL ?? "" },
+                                    set: { server.prometheusURL = $0.isEmpty ? nil : $0 }
+                                ))
+                                .textFieldStyle(.plain)
+                                .focused($focus, equals: .prometheus)
+                                .fieldChrome(focused: focus == .prometheus)
+                            }
+
+                            Text("Optional — a backend's Prometheus /metrics (vLLM, llama.cpp, llama-swap). Shows running/queued requests and KV-cache use on the Status dashboard.")
+                                .font(Theme.metric(10))
+                                .foregroundStyle(Theme.textFaint)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
-                        Spacer()
-                        PillToggle(isOn: $server.localGPU)
-                            .help("Use the local macmon tool for this Mac's GPU metrics")
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                     }
-
-                    FieldGroup(caption: "Prometheus URL") {
-                        TextField("http://host:8000/metrics  ·  optional", text: Binding(
-                            get: { server.prometheusURL ?? "" },
-                            set: { server.prometheusURL = $0.isEmpty ? nil : $0 }
-                        ))
-                        .textFieldStyle(.plain)
-                        .focused($focus, equals: .prometheus)
-                        .fieldChrome(focused: focus == .prometheus)
-                    }
-
-                    Text("Optional — a backend's Prometheus /metrics (vLLM, llama.cpp, llama-swap). Shows running/queued requests and KV-cache use on the Status dashboard.")
-                        .font(Theme.metric(10))
-                        .foregroundStyle(Theme.textFaint)
-                        .fixedSize(horizontal: false, vertical: true)
 
                     // MARK: - Context Window (§7)
 
@@ -1190,6 +1229,10 @@ private struct ServerSettingsRow: View {
         .onAppear {
             apiKey = keychain.get(account: keychainAccount) ?? ""
             if autoExpand { isExpanded = true }
+            // Auto-reveal Advanced if any advanced fields are already configured.
+            if server.metricsAgentURL != nil || server.prometheusURL != nil || server.localGPU {
+                showAdvanced = true
+            }
         }
         .onChange(of: apiKey) { _, newValue in
             keychain.set(newValue.isEmpty ? nil : newValue, account: keychainAccount)
@@ -1319,6 +1362,53 @@ private struct ServerSettingsRow: View {
         let defaultLabels = Set(ServerKind.localCases.map(\.displayName) + ["New Server"])
         if defaultLabels.contains(server.label) {
             server.label = kind.displayName
+        }
+    }
+}
+
+// MARK: - Local setup hint
+
+/// A compact callout shown inside an expanded local server row that gives runtime-specific
+/// setup steps — install instructions, the key command to start the server, and the
+/// default port — so users can get from zero to "Connected" without leaving the app.
+private struct LocalSetupHint: View {
+    let kind: ServerKind
+
+    var body: some View {
+        if !hint.isEmpty {
+            VStack(alignment: .leading, spacing: 5) {
+                Label("Quick setup · \(kind.displayName)", systemImage: "lightbulb")
+                    .font(Theme.label(9))
+                    .tracking(1.0)
+                    .foregroundStyle(Theme.amber.opacity(0.8))
+                Text(hint)
+                    .font(Theme.metric(10))
+                    .foregroundStyle(Theme.textFaint)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.amber.opacity(0.05),
+                        in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(Theme.amber.opacity(0.15), lineWidth: 1)
+            )
+        }
+    }
+
+    private var hint: String {
+        switch kind {
+        case .lmStudio:
+            return "Install LM Studio from lmstudio.ai. Load a model in the Models tab, then start the local server from the Developer tab. Default port: 1234."
+        case .ollama:
+            return "Install Ollama from ollama.com, then pull a model: ollama pull llama3.2. The server starts automatically. Default port: 11434."
+        case .llamaCpp:
+            return "Run the server: llama-server -m model.gguf --port 8080. llama-swap users: point to your proxy's port instead of 8080."
+        case .oMLX:
+            return "Install oMLX (Apple Silicon) from omlx.ai. Load a model in the app and tap Start Server. Default port: 8000."
+        case .cloudAPI, .openRouter:
+            return ""
         }
     }
 }

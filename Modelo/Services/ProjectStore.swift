@@ -16,6 +16,7 @@ final class ProjectStore {
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
         panel.allowsMultipleSelection = false
         panel.prompt = "Add Project"
         panel.message = "Choose a directory to add as a project"
