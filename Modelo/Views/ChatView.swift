@@ -111,6 +111,25 @@ struct ChatView: View {
         boundServer?.contextLength(for: pickedModel?.model.id ?? "") ?? pickedModel?.model.maxContextLength ?? 0
     }
 
+    /// System suffix injected into every request: artifact rendering instructions
+    /// and, when a local workspace is active, a note so the model knows it can
+    /// read/write files on this Mac using the file tools.
+    private var combinedSystemSuffix: String? {
+        var parts: [String] = []
+        if artifactsEnabled { parts.append(ArtifactInstructions.system) }
+        if let path = conversation.projectPath, !path.isEmpty {
+            let name = URL(fileURLWithPath: path).lastPathComponent
+            parts.append("""
+            You have read/write access to the user's local filesystem on this Mac. \
+            Workspace root: \(path) (folder: "\(name)"). \
+            Use read_file to read files, glob to list them, grep to search contents, \
+            write_file to create or overwrite, and edit_file to make targeted edits. \
+            When the user references a file or directory, look for it here first.
+            """)
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: "\n\n")
+    }
+
     /// The currently-selected branch, root→leaf (§1.2). Siblings on other branches
     /// are hidden; navigating siblings re-selects the active leaf.
     private var pathMessages: [Message] {
@@ -204,14 +223,15 @@ struct ChatView: View {
                         .toggleStyle(ChipToggleStyle())
                         .help("Allow this model to call tools")
                 }
-                Spacer(minLength: 8)
-                if let server = pickedModel?.server {
-                    statusPill(for: server)
-                }
+                workspaceButton
                 artifactsButton
                 samplingButton
                 benchmarkButton
                 FontSizeControl(size: $messageFontSize)
+                Spacer(minLength: 8)
+                if let server = pickedModel?.server {
+                    statusPill(for: server)
+                }
             }
             if let model = pickedModel?.model {
                 HStack {
@@ -368,6 +388,58 @@ struct ChatView: View {
         .disabled(discovered.isEmpty)
         .sheet(isPresented: $showBenchmark) {
             BenchmarkView(discovered: discovered, initial: pickedModel)
+        }
+    }
+
+    /// Shows the active workspace as an amber chip (tap to change, ✕ to clear),
+    /// or a folder+ button when no workspace is set. Lets the model on the
+    /// remote server read/write files on this Mac.
+    @ViewBuilder private var workspaceButton: some View {
+        if let path = conversation.projectPath, !path.isEmpty {
+            let name = URL(fileURLWithPath: path).lastPathComponent
+            HStack(spacing: 0) {
+                Button(action: pickWorkspace) {
+                    HStack(spacing: 5) {
+                        Image(systemName: "folder.fill")
+                            .font(.system(size: 10))
+                            .foregroundStyle(Theme.amber)
+                        Text(name)
+                            .font(.mono(10))
+                            .foregroundStyle(Theme.amber)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .frame(maxWidth: 120, alignment: .leading)
+                    }
+                    .padding(.leading, 9)
+                    .padding(.trailing, 4)
+                    .padding(.vertical, 5)
+                }
+                .buttonStyle(.plain)
+                .help("Local workspace — click to change folder")
+
+                Button(action: clearWorkspace) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(Theme.textDim)
+                        .padding(.trailing, 9)
+                        .padding(.leading, 3)
+                        .padding(.vertical, 5)
+                }
+                .buttonStyle(.plain)
+                .help("Clear workspace — model loses local file access")
+            }
+            .background(Theme.amberFillLo, in: RoundedRectangle(cornerRadius: Theme.Radius.control))
+            .overlay(RoundedRectangle(cornerRadius: Theme.Radius.control).stroke(Theme.amberBorder))
+        } else {
+            Button(action: pickWorkspace) {
+                Image(systemName: "folder.badge.plus")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.Palette.inkDim)
+                    .frame(width: 30, height: 26)
+                    .panel(Theme.Palette.panel, radius: 7)
+            }
+            .buttonStyle(.plain)
+            .help("Set a local folder the model can read and write on this Mac")
         }
     }
 
@@ -658,7 +730,7 @@ struct ChatView: View {
                     .frame(height: composerHeight)
                     .onChange(of: draft) { slashSelection = 0 }
                     .padding(.horizontal, 14)
-                    .padding(.vertical, 11)
+                    .padding(.vertical, 14)
                     .panel(Theme.fill,
                            radius: Theme.Radius.field,
                            stroke: composerFocused ? Theme.amber : Theme.line)
@@ -830,7 +902,7 @@ struct ChatView: View {
                                   recorder: UsageRecorder(context: context),
                                   keychain: keychain,
                                   registry: ToolRegistry(tools),
-                                  systemSuffix: artifactsEnabled ? ArtifactInstructions.system : nil,
+                                  systemSuffix: combinedSystemSuffix,
                                   maxToolRounds: maxToolRounds)
         // Notify when a reply finishes and the user has moved to another chat/app.
         // `conversation` is read at completion time so the title/snippet are current.
@@ -845,6 +917,35 @@ struct ChatView: View {
     /// Stops the current streaming turn on demand (the composer's stop button).
     private func stop() {
         sessionStore.cancelTask(for: convoID)
+    }
+
+    /// Opens a folder picker and saves the chosen path as this chat's workspace.
+    /// The session is rebuilt so the file tools are registered with the new root.
+    private func pickWorkspace() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Set Workspace"
+        panel.message = "Choose the folder the model can read and write on this Mac."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        conversation.projectPath = url.path
+        try? context.save()
+        rebuildSession()
+    }
+
+    /// Clears the workspace so the model loses local file access for this chat.
+    private func clearWorkspace() {
+        conversation.projectPath = nil
+        try? context.save()
+        rebuildSession()
+    }
+
+    /// Discards the current session and recreates it so a workspace change (or any
+    /// other registry change) takes effect immediately without reopening the chat.
+    private func rebuildSession() {
+        sessionStore.discard(convoID)
+        ensureSession()
     }
 
     /// Drops a past user turn back into the composer (focused) so it can be edited
