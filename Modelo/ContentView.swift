@@ -57,6 +57,9 @@ struct ContentView: View {
     @State private var endpointFilter: UUID?
     @State private var renamingIDs: Set<PersistentIdentifier> = []
     @AppStorage("consoleInspectorOpen") private var inspectorOpen: Bool = false
+    /// Observed so flipping Settings ▸ Memory drops all sessions — their memory tools
+    /// and index injection are fixed at build, so each chat rebuilds on its next message.
+    @AppStorage(MemoryStore.enabledKey) private var memoryEnabled = false
     @SceneStorage("sidebarRoute") private var storedRoute: String = ""
 
     private let client = LMStudioClient.shared
@@ -101,6 +104,7 @@ struct ContentView: View {
         // Shared across the sidebar and detail so a streaming turn survives chat
         // switches and the sidebar can discard a deleted conversation's session.
         .environment(sessionStore)
+        .onChange(of: memoryEnabled) { sessionStore.invalidateSessions() }
         .preferredColorScheme(Theme.active.scheme)
         .toolbarBackground(.hidden, for: .windowToolbar)
         .toolbar {

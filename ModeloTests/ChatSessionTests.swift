@@ -178,7 +178,7 @@ final class ChatSessionTests: XCTestCase {
         let session = ChatSession(client: provider, context: context,
                                   recorder: UsageRecorder(context: context),
                                   registry: ToolRegistry([SaveMemoryTool(scopes: [.global], root: root)]),
-                                  systemSuffix: { MemoryStore.indexInjection(scopes: [.global], root: root) })
+                                  systemSuffix: { MemoryStore.indexInjection(scopes: [.global], toolsAvailable: $0, root: root) })
         let server = Server(label: "Studio", host: "studio"); context.insert(server)
         let convo = Conversation(modelID: "m", serverID: server.id); context.insert(convo)
 

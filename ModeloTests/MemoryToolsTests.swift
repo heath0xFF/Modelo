@@ -116,6 +116,19 @@ final class MemoryToolsTests: XCTestCase {
         XCTAssertTrue(out.contains("no memories are saved yet"))
     }
 
+    func test_read_badArgumentsErrorIsReadFlavored() async {
+        // A read mistake must not be reported as a failed save — a weak model
+        // could retry with save_memory (mutating) instead of fixing its call.
+        let tool = ReadMemoryTool(scopes: [.global], root: root)
+        do {
+            _ = try await tool.execute(argumentsJSON: "not json")
+            XCTFail("expected error")
+        } catch {
+            XCTAssertTrue(error.localizedDescription.contains("read_memory"))
+            XCTAssertFalse(error.localizedDescription.contains("save the memory"))
+        }
+    }
+
     func test_read_alwaysVisibleAndAutoApproved() {
         let tool = ReadMemoryTool(scopes: [.global], root: root)
         XCTAssertTrue(tool.alwaysVisible)

@@ -40,7 +40,7 @@ struct SaveMemoryTool: Tool {
         struct Args: Decodable { let name: String; let description: String; let content: String; let scope: String? }
         let args: Args
         do { args = try JSONDecoder().decode(Args.self, from: Data(argumentsJSON.utf8)) }
-        catch { throw MemoryError.writeFailed("expected JSON arguments {name, description, content, scope?}") }
+        catch { throw MemoryError.badArguments("save_memory expects JSON {name, description, content, scope?}") }
 
         var note = ""
         let scope: MemoryScope
@@ -85,7 +85,7 @@ struct ReadMemoryTool: Tool {
     func execute(argumentsJSON: String) async throws -> String {
         struct Args: Decodable { let name: String; let scope: String? }
         guard let args = try? JSONDecoder().decode(Args.self, from: Data(argumentsJSON.utf8)) else {
-            throw MemoryError.writeFailed("expected JSON arguments {name, scope?}")
+            throw MemoryError.badArguments("read_memory expects JSON {name, scope?}")
         }
         // Project scope shadows global on a name hit, so search project first.
         let projectScopes = scopes.filter { if case .project = $0 { true } else { false } }

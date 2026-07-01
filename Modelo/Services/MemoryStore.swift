@@ -31,6 +31,7 @@ enum MemoryError: LocalizedError {
     case emptyBody
     case bodyTooLarge(Int)
     case writeFailed(String)
+    case badArguments(String)
 
     var errorDescription: String? {
         switch self {
@@ -38,6 +39,7 @@ enum MemoryError: LocalizedError {
         case .emptyBody:           "Provide the memory content — the fact or preference to remember."
         case .bodyTooLarge(let n): "Memory content is too large (\(n) bytes, limit \(MemoryStore.maxBodyBytes)). Memories are short facts, not documents — save a condensed version."
         case .writeFailed(let why): "Could not save the memory: \(why)"
+        case .badArguments(let why): "Invalid arguments: \(why)"
         }
     }
 }
@@ -124,9 +126,26 @@ enum MemoryStore {
     }
 
     static func read(name: String, scope: MemoryScope, root: URL = defaultRoot) -> Memory? {
-        let file = directory(for: scope, root: root).appending(path: "\(nameSlug(name)).md")
-        guard let content = try? String(contentsOf: file, encoding: .utf8) else { return nil }
-        return parse(content, fileURL: file)
+        let dir = directory(for: scope, root: root)
+        for stem in lookupStems(name) {
+            let file = dir.appending(path: "\(stem).md")
+            if let content = try? String(contentsOf: file, encoding: .utf8) {
+                return parse(content, fileURL: file)
+            }
+        }
+        return nil
+    }
+
+    /// Candidate filename stems for a name lookup: the slug first (tool-saved files),
+    /// then the raw name so hand-renamed files — listed in the index under their raw
+    /// stem — stay readable and deletable. The raw form is only tried when it cannot
+    /// traverse out of the scope directory.
+    private static func lookupStems(_ name: String) -> [String] {
+        let slug = nameSlug(name)
+        guard name != slug, !name.contains("/"), !name.contains(".."), !name.hasPrefix(".") else {
+            return [slug]
+        }
+        return [slug, name]
     }
 
     /// Creates or overwrites the memory named `name` (same slug = update in place).
@@ -150,24 +169,33 @@ enum MemoryStore {
         } catch {
             throw MemoryError.writeFailed(error.localizedDescription)
         }
-        return Memory(name: slug, description: oneLine(description, max: 120),
+        return Memory(name: slug, description: oneLine(description, max: 500),
                       body: trimmedBody, updatedAt: now, fileURL: file)
     }
 
     /// Removes the memory if it exists; deleting a missing memory is a no-op.
     static func delete(name: String, scope: MemoryScope, root: URL = defaultRoot) throws {
-        let file = directory(for: scope, root: root).appending(path: "\(nameSlug(name)).md")
-        guard FileManager.default.fileExists(atPath: file.path) else { return }
-        try FileManager.default.removeItem(at: file)
+        let dir = directory(for: scope, root: root)
+        for stem in lookupStems(name) {
+            let file = dir.appending(path: "\(stem).md")
+            if FileManager.default.fileExists(atPath: file.path) {
+                try FileManager.default.removeItem(at: file)
+                return
+            }
+        }
     }
 
     // MARK: Format (pure, directly testable)
 
     static func serialize(name: String, description: String, body: String, updated: Date) -> String {
-        """
+        // A leading `>` or `|` would read back as a YAML block scalar (empty value) —
+        // quote it so the description survives the round trip.
+        let desc = oneLine(description, max: 500)
+        let safeDesc = (desc.hasPrefix(">") || desc.hasPrefix("|")) ? "\"\(desc)\"" : desc
+        return """
         ---
         name: \(nameSlug(name))
-        description: \(oneLine(description, max: 500))
+        description: \(safeDesc)
         updated: \(iso8601.string(from: updated))
         ---
         \(body)
@@ -190,8 +218,10 @@ enum MemoryStore {
         let fallback = trimmedBody.components(separatedBy: "\n")
             .first { !$0.trimmingCharacters(in: .whitespaces).isEmpty } ?? ""
         let description = (parsed.description?.isEmpty == false) ? parsed.description! : fallback
+        // Clip to the serialize cap, not tighter — the editor writes this value back,
+        // so a load-time clip would silently truncate the stored description.
         return Memory(name: fileURL.deletingPathExtension().lastPathComponent,
-                      description: oneLine(description, max: 120),
+                      description: oneLine(description, max: 500),
                       body: trimmedBody,
                       updatedAt: updatedAt,
                       fileURL: fileURL)
@@ -201,8 +231,12 @@ enum MemoryStore {
 
     /// The compact memory index appended to the system prompt — one line per memory,
     /// full bodies only on demand via `read_memory` (small local contexts). Nil when
-    /// every scope is empty so an unused feature costs zero tokens.
-    static func indexInjection(scopes: [MemoryScope], root: URL = defaultRoot) -> String? {
+    /// every scope is empty so an unused feature costs zero tokens. Pass
+    /// `toolsAvailable: false` when the memory tools aren't offered this request
+    /// (model without tool support, tools toggled off) so the text stays purely
+    /// informational instead of commanding calls the model can't make.
+    static func indexInjection(scopes: [MemoryScope], toolsAvailable: Bool = true,
+                               root: URL = defaultRoot) -> String? {
         var lines: [String] = []
         for scope in scopes {
             let tag = switch scope { case .global: "global"; case .project: "project" }
@@ -211,17 +245,20 @@ enum MemoryStore {
                 lines.append("- [\(tag)] \(memory.name) — \(oneLine(memory.description, max: 100))")
             }
             if memories.count > maxIndexEntries {
-                lines.append("- … (\(memories.count - maxIndexEntries) more \(tag) memories; use read_memory or ask)")
+                lines.append(toolsAvailable
+                    ? "- … (\(memories.count - maxIndexEntries) more \(tag) memories; use read_memory or ask)"
+                    : "- … (\(memories.count - maxIndexEntries) more \(tag) memories)")
             }
         }
         guard !lines.isEmpty else { return nil }
-        return """
-        ## Memory
-        Saved memories from past conversations (name — description). When one looks \
-        relevant, call read_memory with its name before answering. Save new lasting \
-        facts, preferences, or corrections with save_memory.
-        \(lines.joined(separator: "\n"))
-        """
+        let preamble = toolsAvailable
+            ? """
+              Saved memories from past conversations (name — description). When one looks \
+              relevant, call read_memory with its name before answering. Save new lasting \
+              facts, preferences, or corrections with save_memory.
+              """
+            : "Saved memories from past conversations (name — description), for context."
+        return "## Memory\n\(preamble)\n\(lines.joined(separator: "\n"))"
     }
 
     // MARK: Helpers

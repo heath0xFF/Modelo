@@ -137,14 +137,14 @@ private struct MemoryEditPane: View {
                 TextField("memory-name", text: $name)
                     .textFieldStyle(.plain)
                     .focused($focus, equals: .name)
-                    .memoryFieldChrome(focused: focus == .name)
+                    .fieldChrome(focused: focus == .name)
             }
 
             captioned("Description — one line shown to the model in the memory index") {
                 TextField("What this memory covers", text: $details)
                     .textFieldStyle(.plain)
                     .focused($focus, equals: .details)
-                    .memoryFieldChrome(focused: focus == .details)
+                    .fieldChrome(focused: focus == .details)
             }
 
             captioned("Content") {
@@ -187,6 +187,13 @@ private struct MemoryEditPane: View {
 
     private func saveMemory() {
         do {
+            // A rename must not silently clobber a different memory whose slug the
+            // new name happens to match.
+            let newSlug = MemoryStore.nameSlug(name)
+            if newSlug != memory.name, MemoryStore.read(name: newSlug, scope: scope) != nil {
+                saveError = "A memory named “\(newSlug)” already exists — pick another name or edit that one."
+                return
+            }
             let saved = try MemoryStore.save(name: name, description: details, body: contentText, scope: scope)
             // A rename writes a new slug — drop the old file so it doesn't linger.
             if saved.name != memory.name {
@@ -253,23 +260,5 @@ private struct MemoryListRow: View {
         )
         .contentShape(Rectangle())
         .onTapGesture { onTap() }
-    }
-}
-
-// MARK: - Field chrome (local copy of Settings' private FieldChrome)
-
-private extension View {
-    func memoryFieldChrome(focused: Bool) -> some View {
-        self
-            .font(Theme.metric(12))
-            .foregroundStyle(Theme.textHi)
-            .padding(.horizontal, 11)
-            .padding(.vertical, 8)
-            .background(Theme.windowBG, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(focused ? Theme.amber.opacity(0.85) : Color.white.opacity(0.10),
-                                  lineWidth: 1)
-            )
     }
 }

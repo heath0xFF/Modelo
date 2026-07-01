@@ -1025,17 +1025,22 @@ struct ChatView: View {
         if memoryEnabled {
             tools += [SaveMemoryTool(scopes: memoryScopes), ReadMemoryTool(scopes: memoryScopes)]
         }
-        // The suffix closure re-reads the memory flag and files each round, so saves
-        // and Settings edits reach the prompt next turn with no session rebuild. Tool
-        // registration still follows the fsToolsEnabled precedent (rebuild to change).
+        // The memory flag is snapshotted here so the injected index and the registered
+        // tools always agree (never a prompt commanding tools that aren't offered).
+        // Toggling Settings ▸ Memory invalidates all sessions via ContentView, so open
+        // chats rebuild against the new setting on their next message. The file listing
+        // itself stays live per round — a memory saved in round 1 is in the prompt from
+        // round 2 with no rebuild.
         let staticSuffix = combinedSystemSuffix
+        let includeMemory = memoryEnabled
         let session = ChatSession(client: LMStudioClient.shared, context: context,
                                   recorder: UsageRecorder(context: context),
                                   keychain: keychain,
                                   registry: ToolRegistry(tools),
-                                  systemSuffix: {
-                                      let memoryIndex = UserDefaults.standard.bool(forKey: MemoryStore.enabledKey)
-                                          ? MemoryStore.indexInjection(scopes: memoryScopes) : nil
+                                  systemSuffix: { toolsActive in
+                                      let memoryIndex = includeMemory
+                                          ? MemoryStore.indexInjection(scopes: memoryScopes,
+                                                                       toolsAvailable: toolsActive) : nil
                                       let parts = [staticSuffix, memoryIndex].compactMap(\.self).filter { !$0.isEmpty }
                                       return parts.isEmpty ? nil : parts.joined(separator: "\n\n")
                                   },
@@ -1206,6 +1211,10 @@ struct ChatView: View {
     }
 
     private func send() {
+        // The session may have been invalidated by a settings change (e.g. the memory
+        // toggle) since this view appeared — rebuild it lazily rather than dropping
+        // the send.
+        ensureSession()
         guard let session else { return }
         // Slash commands (§3.1) are handled locally, never sent to the model.
         if let command = SlashParser.parse(draft) {

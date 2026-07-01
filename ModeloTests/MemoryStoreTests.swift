@@ -143,6 +143,44 @@ final class MemoryStoreTests: XCTestCase {
         XCTAssertEqual(all.first?.description, "A bare hand-written fact.")
     }
 
+    func test_readAndDelete_handRenamedFileByRawStem() throws {
+        // A hand-created file whose stem isn't slug-normal is listed under its raw
+        // stem — read/delete by that exact name must still resolve it.
+        let dir = MemoryStore.directory(for: .global, root: root)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try "A hand-named fact.".write(to: dir.appending(path: "My Note.md"), atomically: true, encoding: .utf8)
+        XCTAssertEqual(MemoryStore.list(.global, root: root).first?.name, "My Note")
+        XCTAssertEqual(MemoryStore.read(name: "My Note", scope: .global, root: root)?.body, "A hand-named fact.")
+        try MemoryStore.delete(name: "My Note", scope: .global, root: root)
+        XCTAssertEqual(MemoryStore.list(.global, root: root), [])
+    }
+
+    func test_read_rawStemFallbackCannotTraverse() throws {
+        try MemoryStore.save(name: "safe", description: "d", body: "b", scope: .global, root: root)
+        // Names with separators/traversal never get the raw-stem fallback — they
+        // resolve only via the slug, which strips `/` and `.`.
+        XCTAssertNil(MemoryStore.read(name: "../global/safe", scope: .project(path: "/tmp/p"), root: root))
+        XCTAssertNil(MemoryStore.read(name: "sub/safe", scope: .global, root: root))
+    }
+
+    func test_saveThenRead_longDescriptionSurvivesRoundTrip() throws {
+        // The editor writes the loaded description back — a load-time clip would
+        // silently truncate it (must hold up to the 500-char serialize cap).
+        let desc = String(repeating: "d", count: 300)
+        try MemoryStore.save(name: "long-desc", description: desc, body: "b", scope: .global, root: root)
+        XCTAssertEqual(MemoryStore.read(name: "long-desc", scope: .global, root: root)?.description, desc)
+    }
+
+    func test_serializeParse_blockScalarLookingDescription() {
+        // A leading `>`/`|` would parse as a YAML block scalar (empty) if unquoted.
+        for desc in ["> prefer blockquotes", "| keep pipes"] {
+            let text = MemoryStore.serialize(name: "n", description: desc, body: "body",
+                                             updated: Date(timeIntervalSince1970: 1_700_000_000))
+            let mem = MemoryStore.parse(text, fileURL: URL(fileURLWithPath: "/x/n.md"))
+            XCTAssertEqual(mem.description, desc)
+        }
+    }
+
     func test_delete_removesFile_andMissingIsNoop() throws {
         try MemoryStore.save(name: "gone", description: "d", body: "b", scope: .global, root: root)
         try MemoryStore.delete(name: "gone", scope: .global, root: root)
@@ -186,6 +224,17 @@ final class MemoryStoreTests: XCTestCase {
         let entryLines = index.components(separatedBy: "\n").filter { $0.hasPrefix("- [global]") }
         XCTAssertEqual(entryLines.count, MemoryStore.maxIndexEntries)
         XCTAssertTrue(index.contains("(5 more global memories"))
+    }
+
+    func test_index_contextOnlyWordingWhenToolsUnavailable() throws {
+        for i in 0..<(MemoryStore.maxIndexEntries + 1) {
+            try MemoryStore.save(name: "m-\(i)", description: "d", body: "b", scope: .global, root: root)
+        }
+        let index = MemoryStore.indexInjection(scopes: [.global], toolsAvailable: false, root: root)!
+        // No tool this request — the injected text must not command tool calls.
+        XCTAssertTrue(index.hasPrefix("## Memory"))
+        XCTAssertFalse(index.contains("read_memory"))
+        XCTAssertFalse(index.contains("save_memory"))
     }
 
     func test_index_clipsLongDescriptions() throws {
