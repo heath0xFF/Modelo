@@ -32,6 +32,18 @@ private struct EchoTool: Tool {
     func execute(argumentsJSON: String) async throws -> String { reply }
 }
 
+/// A mutating tool that pauses for approval like write/edit/bash do.
+private struct MutatingEchoTool: Tool {
+    let name = "mutate"
+    let description = "Pretends to write"
+    let parameters = JSONSchema(properties: [:], required: [])
+    var isMutating: Bool { true }
+    func approvalPreview(argumentsJSON: String) -> ToolApprovalPreview? {
+        ToolApprovalPreview(kind: .write, title: "Write test", detail: "content")
+    }
+    func execute(argumentsJSON: String) async throws -> String { "MUTATED" }
+}
+
 @MainActor
 final class ChatSessionTests: XCTestCase {
     func makeContext() throws -> ModelContext {
@@ -188,5 +200,105 @@ final class ChatSessionTests: XCTestCase {
         let session = ChatSession(client: FakeProvider(events: []), context: context,
                                   recorder: UsageRecorder(context: context))
         XCTAssertEqual(session.maxToolRounds, ChatSession.defaultMaxToolRounds)
+    }
+
+    // MARK: YOLO mode
+
+    /// Spin the main actor until the session pauses on an approval (or fail).
+    private func waitForPendingApproval(in session: ChatSession) async throws {
+        for _ in 0..<1000 {
+            if session.pendingApproval != nil { return }
+            await Task.yield()
+        }
+        XCTFail("never paused for approval")
+    }
+
+    func test_send_yolo_autoApprovesMutatingTool() async throws {
+        let context = try makeContext()
+        let provider = FakeProvider(scripts: [
+            [.toolCalls([ToolCall(id: "c1", name: "mutate", arguments: "{}")])],
+            [.delta("Done"), .usage(promptTokens: 20, completionTokens: 1)]
+        ])
+        let session = ChatSession(client: provider, context: context,
+                                  recorder: UsageRecorder(context: context),
+                                  registry: ToolRegistry([MutatingEchoTool()]),
+                                  yoloMode: true)
+        let server = Server(label: "Studio", host: "studio"); context.insert(server)
+        let convo = Conversation(modelID: "m", serverID: server.id); context.insert(convo)
+
+        await session.send("write it", in: convo, server: server, modelSupportsTools: true)
+
+        // No approval pause, tool ran, turn completed.
+        XCTAssertNil(session.pendingApproval)
+        XCTAssertEqual(convo.messages.first { $0.role == .tool }?.content, "MUTATED")
+        XCTAssertEqual(provider.callCount, 2)
+        XCTAssertNil(session.errorText)
+    }
+
+    func test_send_yolo_ignoresRoundCap() async throws {
+        let context = try makeContext()
+        let toolRound: [StreamEvent] = [.toolCalls([ToolCall(id: "c", name: "echo", arguments: "{}")])]
+        let provider = FakeProvider(scripts: [
+            toolRound, toolRound, toolRound, toolRound, toolRound,
+            [.delta("Final"), .usage(promptTokens: 20, completionTokens: 1)]
+        ])
+        let session = ChatSession(client: provider, context: context,
+                                  recorder: UsageRecorder(context: context),
+                                  registry: ToolRegistry([EchoTool(reply: "x")]),
+                                  maxToolRounds: 2, yoloMode: true)
+        let server = Server(label: "Studio", host: "studio"); context.insert(server)
+        let convo = Conversation(modelID: "m", serverID: server.id); context.insert(convo)
+
+        await session.send("loop", in: convo, server: server, modelSupportsTools: true)
+
+        // Runs well past the configured cap and finishes on the model's terms.
+        XCTAssertEqual(provider.callCount, 6)
+        XCTAssertNil(session.errorText)
+    }
+
+    func test_yolo_flipOnMidTurn_releasesPendingApproval() async throws {
+        let context = try makeContext()
+        let provider = FakeProvider(scripts: [
+            [.toolCalls([ToolCall(id: "c1", name: "mutate", arguments: "{}")])],
+            [.delta("Done"), .usage(promptTokens: 20, completionTokens: 1)]
+        ])
+        let session = ChatSession(client: provider, context: context,
+                                  recorder: UsageRecorder(context: context),
+                                  registry: ToolRegistry([MutatingEchoTool()]))
+        let server = Server(label: "Studio", host: "studio"); context.insert(server)
+        let convo = Conversation(modelID: "m", serverID: server.id); context.insert(convo)
+
+        let turn = Task { await session.send("write it", in: convo, server: server, modelSupportsTools: true) }
+        try await waitForPendingApproval(in: session)
+
+        session.yoloMode = true
+        await turn.value
+
+        // The pending approval was released as a one-off grant and the tool ran.
+        XCTAssertNil(session.pendingApproval)
+        XCTAssertEqual(convo.messages.first { $0.role == .tool }?.content, "MUTATED")
+        XCTAssertNil(session.errorText)
+    }
+
+    func test_withoutYolo_mutatingToolStillPrompts() async throws {
+        let context = try makeContext()
+        let provider = FakeProvider(scripts: [
+            [.toolCalls([ToolCall(id: "c1", name: "mutate", arguments: "{}")])],
+            [.delta("Ok"), .usage(promptTokens: 20, completionTokens: 1)]
+        ])
+        let session = ChatSession(client: provider, context: context,
+                                  recorder: UsageRecorder(context: context),
+                                  registry: ToolRegistry([MutatingEchoTool()]))
+        let server = Server(label: "Studio", host: "studio"); context.insert(server)
+        let convo = Conversation(modelID: "m", serverID: server.id); context.insert(convo)
+
+        let turn = Task { await session.send("write it", in: convo, server: server, modelSupportsTools: true) }
+        try await waitForPendingApproval(in: session)
+
+        session.respondToApproval(.deny)
+        await turn.value
+
+        XCTAssertEqual(convo.messages.first { $0.role == .tool }?.content,
+                       "The user declined to run mutate.")
     }
 }

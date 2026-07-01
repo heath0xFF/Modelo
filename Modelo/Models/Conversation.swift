@@ -31,6 +31,12 @@ final class Conversation {
     /// Per-conversation toggle for agentic tool use. Default on; only has effect
     /// when the bound model advertises tool support.
     var toolsEnabled: Bool = true
+    /// Per-conversation YOLO switch: mutating tool calls run without approval and
+    /// the tool-round cap is lifted. Effective YOLO = this OR the global setting.
+    var yoloEnabled: Bool = false
+    /// Per-conversation cap on tool rounds per turn; nil inherits the global
+    /// `globalMaxToolRounds` default (same override idiom as `samplingOverride`).
+    var maxToolRoundsOverride: Int?
 
     /// Auto-compaction (§1.5): when on and the active path nears the model's context
     /// window, older turns are summarized into `summary` so the chat runs indefinitely.
