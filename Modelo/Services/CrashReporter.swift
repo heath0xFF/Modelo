@@ -54,7 +54,9 @@ final class CrashReporter: NSObject, MXMetricManagerSubscriber {
                 .replacingOccurrences(of: ":", with: "-")
             let file = Self.archiveFolder.appending(path: "diagnostic-\(stamp).json")
             try payload.jsonRepresentation().write(to: file)
-            Log.crash.info("Archived diagnostic payload to \(file.path, privacy: .public)")
+            // Log only the filename — the folder is fixed (see class doc) and the full
+            // path would put the user's home-directory name into shareable logs.
+            Log.crash.info("Archived diagnostic payload as \(file.lastPathComponent, privacy: .public)")
         } catch {
             Log.crash.error("Failed to archive diagnostic payload: \(error.localizedDescription, privacy: .public)")
         }
