@@ -157,6 +157,9 @@ struct ContentView: View {
         }
         .task(id: serverDiscoveryKey) {
             gpuMonitor.start(servers: servers)   // pick up agent-URL / macmon changes
+            // Restart load-state polling too, so switching a server to exo (or adding one)
+            // at runtime begins populating its loaded-model snapshot without an app relaunch.
+            monitor.start(servers: servers, registry: registry)
             await refreshModels()
         }
         .onAppear { restoreRoute(); consumeTappedConversation(); notifier.requestAuthorization(); updateForeground() }
