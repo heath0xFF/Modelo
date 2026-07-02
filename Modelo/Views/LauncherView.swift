@@ -413,22 +413,24 @@ private struct ModelTile: View {
                 .help(isFavorite ? "Remove from favorites" : "Add to favorites")
 
                 if model.isLoaded {
-                    if model.keepInRam == true, let onUnpin {
-                        Button(action: onUnpin) {
-                            Image(systemName: "pin.slash")
-                                .font(.system(size: 9, weight: .medium))
-                                .foregroundStyle(Theme.textLo)
+                    if item.server.kind == .lmStudio {
+                        if model.keepInRam == true, let onUnpin {
+                            Button(action: onUnpin) {
+                                Image(systemName: "pin.slash")
+                                    .font(.system(size: 9, weight: .medium))
+                                    .foregroundStyle(Theme.textLo)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Unpin model (allow eviction)")
+                        } else if model.keepInRam != true, let onPin {
+                            Button(action: onPin) {
+                                Image(systemName: "pin")
+                                    .font(.system(size: 9, weight: .medium))
+                                    .foregroundStyle(Theme.textLo)
+                            }
+                            .buttonStyle(.plain)
+                            .help("Pin model (prevent auto-eviction)")
                         }
-                        .buttonStyle(.plain)
-                        .help("Unpin model (allow eviction)")
-                    } else if model.keepInRam != true, let onPin {
-                        Button(action: onPin) {
-                            Image(systemName: "pin")
-                                .font(.system(size: 9, weight: .medium))
-                                .foregroundStyle(Theme.textLo)
-                        }
-                        .buttonStyle(.plain)
-                        .help("Pin model (prevent auto-eviction)")
                     }
                     if let onUnload {
                         Button {
