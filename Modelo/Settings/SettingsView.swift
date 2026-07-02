@@ -88,13 +88,13 @@ struct SettingsView: View {
             ServerSettingsRow(server: server,
                               onDelete: {
                 context.delete(server)
-                try? context.save()
+                context.saveOrLog()
             }, autoExpand: server.id == newlyAddedID)
         } else {
             CloudServerSettingsRow(server: server, keychain: keychain,
                                    onDelete: {
                 context.delete(server)
-                try? context.save()
+                context.saveOrLog()
             }, autoExpand: server.id == newlyAddedID)
         }
     }
@@ -175,7 +175,7 @@ struct SettingsView: View {
                                 onDelete: {
                                     let deletingSelected = persona.id == selectedPersonaID
                                     context.delete(persona)
-                                    try? context.save()
+                                    context.saveOrLog()
                                     if deletingSelected {
                                         selectedPersonaID = personas.first(where: { $0.id != persona.id })?.id
                                     }
@@ -305,7 +305,7 @@ struct SettingsView: View {
         let nextOrder = (servers.map(\.sortOrder).max() ?? 0) + 1
         let server = Server(label: label, host: baseURL, port: 0, sortOrder: nextOrder, kind: .cloudAPI)
         context.insert(server)
-        try? context.save()
+        context.saveOrLog()
         newlyAddedID = server.id
     }
 
@@ -314,7 +314,7 @@ struct SettingsView: View {
         let server = Server(label: kind.displayName, host: "localhost",
                             port: kind.defaultPort, sortOrder: nextOrder, kind: kind)
         context.insert(server)
-        try? context.save()
+        context.saveOrLog()
         newlyAddedID = server.id
     }
 
@@ -333,7 +333,7 @@ struct SettingsView: View {
         let persona = Persona(name: "New Persona", icon: "person",
                               tagline: "", systemPrompt: "", sortOrder: nextOrder)
         context.insert(persona)
-        try? context.save()
+        context.saveOrLog()
         selectedPersonaID = persona.id
     }
 }
@@ -649,7 +649,7 @@ private struct PresetsSettingsTab: View {
                                 onDelete: {
                                     let deletingSelected = preset.id == selectedPresetID
                                     context.delete(preset)
-                                    try? context.save()
+                                    context.saveOrLog()
                                     if deletingSelected { selectedPresetID = nil }
                                 }
                             )
@@ -695,7 +695,7 @@ private struct PresetsSettingsTab: View {
     private func addPreset() {
         let preset = Preset(name: "New Preset", sortOrder: presets.count)
         context.insert(preset)
-        try? context.save()
+        context.saveOrLog()
         selectedPresetID = preset.id
     }
 }
@@ -1258,7 +1258,7 @@ private struct ServerSettingsRow: View {
             contextLength: suggestedModelID.isEmpty ? 32768 : 131072
         )
         server.contextLengthOverrides.append(override)   // sets the `server` relationship
-        try? modelContext.save()
+        modelContext.saveOrLog()
     }
 
     /// Returns unique model IDs from conversations for the given server, sorted by frequency (most common first).
@@ -1320,7 +1320,7 @@ private struct ServerSettingsRow: View {
 
             Button(action: {
                 server.contextLengthOverrides.removeAll(where: { $0.id == override.id })
-                try? modelContext.save()
+                modelContext.saveOrLog()
             }) {
                 Image(systemName: "xmark.circle.fill")
                     .font(.system(size: 10))

@@ -390,7 +390,7 @@ struct SidebarView: View {
     private func rowMenu(_ convo: Conversation) -> some View {
         Button {
             convo.isPinned.toggle()
-            try? context.save()
+            context.saveOrLog()
         } label: {
             Label(convo.isPinned ? "Unpin" : "Pin",
                   systemImage: convo.isPinned ? "pin.slash" : "pin")
@@ -400,7 +400,7 @@ struct SidebarView: View {
             ForEach(folders, id: \.persistentModelID) { folder in
                 Button {
                     convo.folder = folder
-                    try? context.save()
+                    context.saveOrLog()
                 } label: {
                     if convo.folder?.persistentModelID == folder.persistentModelID {
                         Label(folder.name, systemImage: "checkmark")
@@ -419,7 +419,7 @@ struct SidebarView: View {
                 Divider()
                 Button {
                     convo.folder = nil
-                    try? context.save()
+                    context.saveOrLog()
                 } label: { Label("Remove from Folder", systemImage: "folder.badge.minus") }
             }
         } label: {
@@ -513,7 +513,7 @@ struct SidebarView: View {
             convo.folder = folder
         }
         pendingFolderConversation = nil
-        try? context.save()
+        context.saveOrLog()
     }
 
     private func renameFolder() {
@@ -521,7 +521,7 @@ struct SidebarView: View {
         let name = renameFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
         if !name.isEmpty {
             folder.name = name
-            try? context.save()
+            context.saveOrLog()
         }
         renameTarget = nil
     }
@@ -530,7 +530,7 @@ struct SidebarView: View {
     /// conversations (they fall back to date buckets) rather than deleting them.
     private func deleteFolder(_ folder: Folder) {
         context.delete(folder)
-        try? context.save()
+        context.saveOrLog()
     }
 
     private func delete(_ convo: Conversation) {
@@ -541,7 +541,7 @@ struct SidebarView: View {
         // now-deleted conversation (it no longer gets torn down by leaving the chat).
         sessionStore.discard(convo.persistentModelID)
         context.delete(convo)
-        try? context.save()
+        context.saveOrLog()
     }
 
     // MARK: - Timestamps

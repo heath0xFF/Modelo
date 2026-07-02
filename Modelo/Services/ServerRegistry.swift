@@ -35,6 +35,6 @@ final class ServerRegistry {
         guard existing.isEmpty else { return }
         context.insert(Server(label: "Local Server", host: "localhost", port: 1234, sortOrder: 0))
         do { try context.save() }
-        catch { print("ServerRegistry.seedIfNeeded save failed: \(error)") }
+        catch { Log.data.error("seedIfNeeded save failed: \(error.localizedDescription, privacy: .public)") }
     }
 }

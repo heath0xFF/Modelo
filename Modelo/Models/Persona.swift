@@ -50,6 +50,6 @@ final class Persona {
             context.insert(Persona(name: name, icon: icon, tagline: tagline,
                                    systemPrompt: prompt, sortOrder: i))
         }
-        try? context.save()
+        context.saveOrLog()
     }
 }

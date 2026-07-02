@@ -114,6 +114,7 @@ struct ProjectLandingView: View {
                     return DirectoryEntry(name: $0.lastPathComponent, isDirectory: isDir)
                 }
         } catch {
+            Log.app.error("Project directory read failed: \(error.localizedDescription, privacy: .public)")
             loadError = "Cannot read directory"
         }
     }

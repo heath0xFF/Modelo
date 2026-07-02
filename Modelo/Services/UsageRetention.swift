@@ -21,6 +21,7 @@ enum UsageRetention {
         } catch {
             // Don't leave pending deletes dangling in the context for an unrelated save
             // to commit later — roll back to a clean state on failure.
+            Log.data.error("Usage retention prune failed: \(error.localizedDescription, privacy: .public)")
             context.rollback()
         }
     }
