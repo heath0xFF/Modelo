@@ -256,7 +256,6 @@ struct ChatView: View {
                     agentButton
                 }
                 benchmarkButton
-                FontSizeControl(size: $messageFontSize)
                 Spacer(minLength: 8)
                 if let server = pickedModel?.server {
                     statusPill(for: server)
@@ -1361,38 +1360,5 @@ private struct ToolApprovalCard: View {
         .padding(11)
         .background(Theme.amberFillLo, in: RoundedRectangle(cornerRadius: Theme.Radius.card))
         .overlay(RoundedRectangle(cornerRadius: Theme.Radius.card).stroke(Theme.amberBorder))
-    }
-}
-
-/// A−/A+ stepper for the chat text size. Clamped to a sane range; the same value
-/// is also driven by the ⌘+ / ⌘- / ⌘0 menu commands.
-struct FontSizeControl: View {
-    @Binding var size: Double
-
-    static let range: ClosedRange<Double> = 12...26
-
-    var body: some View {
-        HStack(spacing: 0) {
-            button("textformat.size.smaller") {
-                size = max(Self.range.lowerBound, size - 1)
-            }
-            Rectangle().fill(Theme.Palette.stroke).frame(width: 1, height: 16)
-            button("textformat.size.larger") {
-                size = min(Self.range.upperBound, size + 1)
-            }
-        }
-        .panel(Theme.Palette.panel, radius: 7)
-        .help("Chat text size (⌘+ / ⌘−)")
-    }
-
-    private func button(_ symbol: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 12))
-                .foregroundStyle(Theme.Palette.inkDim)
-                .frame(width: 30, height: 26)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
     }
 }

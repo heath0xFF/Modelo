@@ -124,13 +124,14 @@ struct ModeloApp: App {
             CommandGroup(after: .toolbar) {
                 ConsoleMenuButton()
                 Divider()
+                // Chat text size is clamped to 12...26 pt.
                 Button("Increase Text Size") {
-                    messageFontSize = min(FontSizeControl.range.upperBound, messageFontSize + 1)
+                    messageFontSize = min(26, messageFontSize + 1)
                 }
                 .keyboardShortcut("+", modifiers: .command)
 
                 Button("Decrease Text Size") {
-                    messageFontSize = max(FontSizeControl.range.lowerBound, messageFontSize - 1)
+                    messageFontSize = max(12, messageFontSize - 1)
                 }
                 .keyboardShortcut("-", modifiers: .command)
 
