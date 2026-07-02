@@ -141,11 +141,33 @@ extension ThemePalette {
         green: 0xA6E3A1, idle: 0xF9E2AF, offline: 0x6C7086, alert: 0xF38BA8,
         blue: 0x89B4FA, purple: 0xCBA6F7, vision: 0x74C7EC, think: 0xB4BEFE
     )
+
+    /// Light mode with a naval blue surface ramp, gold interactive accents, and
+    /// lime-green status indicators on a paper-white content canvas.
+    static let lager = build(
+        scheme: .light,
+        crust: 0xCAD6EC, mantle: 0xBECEE8, base: 0xF4F8FF, surface0: 0xDEE9F6,
+        text: 0x0A1B38, subtext1: 0x1C3254, subtext0: 0x354E72, overlay1: 0x5B7490, overlay0: 0x7C94B0,
+        accent: 0xBF7E0A, accentName: 0xA56808, accentDeep: 0x885206,
+        green: 0x5AA80E, idle: 0xC08A10, offline: 0x788EA8, alert: 0xCC3020,
+        blue: 0x1858B5, purple: 0x6845A5, vision: 0x0C7CB2, think: 0x6C3CA2
+    )
+
+    /// Dark mode with a warm black-brown base, bronze/copper action gradients, and
+    /// gold high-contrast signal accents.
+    static let negra = build(
+        scheme: .dark,
+        crust: 0x0D0A08, mantle: 0x17120E, base: 0x201810, surface0: 0x2C1E14,
+        text: 0xF0E6D4, subtext1: 0xCDB897, subtext0: 0xA89070, overlay1: 0x7E6050, overlay0: 0x5E4838,
+        accent: 0xB87838, accentName: 0xD0A448, accentDeep: 0x784818,
+        green: 0x72B825, idle: 0xC89820, offline: 0x4E3C2C, alert: 0xE04825,
+        blue: 0x6090C8, purple: 0x9870C0, vision: 0x5898C8, think: 0xA880D0
+    )
 }
 
 /// The user-selectable themes (§3.5). Raw values persist in `@AppStorage("themeID")`.
 enum ThemeID: String, CaseIterable, Identifiable {
-    case dark, light, latte, frappe, macchiato, mocha
+    case dark, light, latte, frappe, macchiato, mocha, lager, negra
 
     var id: String { rawValue }
 
@@ -157,6 +179,8 @@ enum ThemeID: String, CaseIterable, Identifiable {
         case .frappe:    return "Catppuccin Frappé"
         case .macchiato: return "Catppuccin Macchiato"
         case .mocha:     return "Catppuccin Mocha"
+        case .lager:     return "Lager"
+        case .negra:     return "Negra"
         }
     }
 
@@ -168,6 +192,8 @@ enum ThemeID: String, CaseIterable, Identifiable {
         case .frappe:    return .frappe
         case .macchiato: return .macchiato
         case .mocha:     return .mocha
+        case .lager:     return .lager
+        case .negra:     return .negra
         }
     }
 
