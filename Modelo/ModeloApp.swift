@@ -188,7 +188,7 @@ struct ModeloApp: App {
                 .preferredColorScheme(palette.scheme)
                 .id(themeID)
         }
-        .windowResizability(.contentSize)
+        .windowResizability(.contentMinSize)
     }
 
     /// Opens the SwiftData container, recovering from an unopenable store instead of
