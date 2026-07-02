@@ -64,6 +64,7 @@ struct ChatView: View {
     @AppStorage(FSToolSettings.shellKey)   private var shellToolEnabled = false
     @AppStorage(FSToolSettings.rootKey)    private var fsToolsRoot = ""
     @Query(sort: \Preset.sortOrder) private var presets: [Preset]
+    @Query(sort: \Persona.sortOrder) private var personas: [Persona]
     @State private var showSampling = false
     @State private var showBenchmark = false
     @State private var showAgentControls = false
@@ -841,8 +842,90 @@ struct ChatView: View {
 
     // MARK: Composer
 
+    /// True once the chat has any messages — the point past which the system
+    /// prompt (and therefore the persona) is fixed.
+    private var chatHasHistory: Bool { !conversation.messages.isEmpty }
+
+    /// SF Symbol for the chat's current persona, matched by name; falls back to
+    /// a generic person glyph when there's no persona or its symbol is invalid.
+    private var activePersonaIcon: String {
+        guard let name = conversation.personaName,
+              let match = personas.first(where: { $0.name == name }) else { return "person" }
+        return NSImage(systemSymbolName: match.icon, accessibilityDescription: nil) != nil ? match.icon : "person"
+    }
+
+    /// Persona control above the input. A chat's system prompt is set once, at
+    /// the start, so the picker is editable only on an empty chat and becomes a
+    /// static label afterward. Hidden in project chats — those own their prompt.
+    @ViewBuilder private var personaBar: some View {
+        if conversation.projectPath == nil {
+            HStack(spacing: 8) {
+                if chatHasHistory {
+                    HStack(spacing: 5) {
+                        Image(systemName: activePersonaIcon)
+                            .font(.system(size: 10))
+                        Text(conversation.personaName ?? "No persona")
+                            .font(Theme.label(10))
+                    }
+                    .foregroundStyle(Theme.textFaint)
+                    .help("The persona is set before the first message and can't be changed after.")
+                } else {
+                    Menu {
+                        Button { setPersona(nil) } label: {
+                            if conversation.personaName == nil {
+                                Label("None", systemImage: "checkmark")
+                            } else {
+                                Text("None")
+                            }
+                        }
+                        if !personas.isEmpty { Divider() }
+                        ForEach(personas) { persona in
+                            Button { setPersona(persona) } label: {
+                                if conversation.personaName == persona.name {
+                                    Label(persona.name, systemImage: "checkmark")
+                                } else {
+                                    Text(persona.name)
+                                }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: activePersonaIcon)
+                                .font(.system(size: 10))
+                            Text(conversation.personaName ?? "Persona")
+                                .font(Theme.label(10))
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 8, weight: .semibold))
+                        }
+                        .foregroundStyle(conversation.personaName != nil ? Theme.amber : Theme.textDim)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .panel(Theme.fill, radius: 7,
+                               stroke: conversation.personaName != nil ? Theme.amber.opacity(0.4) : Theme.line)
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .help("Set this chat's persona (before the first message)")
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 10)
+        }
+    }
+
+    /// Apply a persona to the (empty) chat by copying its system prompt, or clear
+    /// it for "None". `personaName` is kept only for the picker's label.
+    private func setPersona(_ persona: Persona?) {
+        conversation.systemPrompt = persona?.systemPrompt
+        conversation.personaName = persona?.name
+        try? context.save()
+    }
+
     private var composer: some View {
         VStack(spacing: 0) {
+            personaBar
             if !pendingAttachments.isEmpty {
                 attachmentStrip
             }

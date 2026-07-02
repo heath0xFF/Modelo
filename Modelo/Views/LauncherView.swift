@@ -7,18 +7,15 @@ import SwiftData
 struct LauncherView: View {
     let discovered: [DiscoveredModel]
     @Binding var endpointFilter: UUID?
-    let onLaunch: (DiscoveredModel, Persona?) -> Void
+    let onLaunch: (DiscoveredModel) -> Void
     var onUnload: ((DiscoveredModel) async -> Void)? = nil
     var onPin: ((DiscoveredModel) async -> Void)? = nil
     var onUnpin: ((DiscoveredModel) async -> Void)? = nil
     /// Re-query every server's `/models`. Wired to the "Fetch models" button.
     var onRefresh: (() async -> Void)? = nil
 
-    @Query(sort: \Persona.sortOrder) private var personas: [Persona]
     @State private var isRefreshing = false
-    @State private var selectedPersona: Persona?
     @State private var activeFilters: Set<String> = ["free"]
-    @State private var personaOffset: CGFloat = 0
     @Environment(ServerRegistry.self) private var registry
     @Environment(FavoritesStore.self) private var favorites
     @Query(sort: \Server.sortOrder) private var servers: [Server]
@@ -61,94 +58,12 @@ struct LauncherView: View {
             Theme.windowBG.ignoresSafeArea()
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
-                    personaSection
-                    Divider().overlay(Color.white.opacity(0.10))
                     modelSection
                 }
                 .padding(24)
                 .hideScrollIndicators()
             }
             .scrollIndicators(.hidden)
-        }
-    }
-
-    // MARK: - Persona row
-
-    private var personaSection: some View {
-        let canScrollLeft = personaOffset < -1
-        return VStack(alignment: .leading, spacing: 10) {
-            Eyebrow("Persona — optional")
-            // ViewThatFits tries the flat HStack first; if it overflows the
-            // available width, SwiftUI falls back to the ScrollView branch —
-            // at which point we know overflow exists and can show the chevrons.
-            ViewThatFits(in: .horizontal) {
-                personaTiles
-                ScrollViewReader { proxy in
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        personaTiles
-                            .background(GeometryReader { geo in
-                                Color.clear.preference(
-                                    key: PersonaScrollKey.self,
-                                    value: geo.frame(in: .named("personaScroll")).origin
-                                )
-                            })
-                    }
-                    .hideScrollIndicators()
-                    .coordinateSpace(name: "personaScroll")
-                    .onPreferenceChange(PersonaScrollKey.self) { personaOffset = $0.x }
-                    .overlay(alignment: .leading) {
-                        if canScrollLeft {
-                            Button {
-                                withAnimation { proxy.scrollTo(personas.first?.id, anchor: .leading) }
-                            } label: {
-                                LinearGradient(
-                                    colors: [Theme.windowBG, .clear],
-                                    startPoint: .leading, endPoint: .trailing
-                                )
-                                .frame(width: 32)
-                                .overlay(alignment: .leading) {
-                                    Image(systemName: "chevron.left")
-                                        .font(.system(size: 10, weight: .medium))
-                                        .foregroundStyle(.secondary)
-                                        .padding(.leading, 6)
-                                }
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .overlay(alignment: .trailing) {
-                        Button {
-                            withAnimation { proxy.scrollTo(personas.last?.id, anchor: .trailing) }
-                        } label: {
-                            LinearGradient(
-                                colors: [.clear, Theme.windowBG],
-                                startPoint: .leading, endPoint: .trailing
-                            )
-                            .frame(width: 32)
-                            .overlay(alignment: .trailing) {
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 10, weight: .medium))
-                                    .foregroundStyle(.secondary)
-                                    .padding(.trailing, 6)
-                            }
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-        }
-    }
-
-    private var personaTiles: some View {
-        HStack(spacing: 10) {
-            ForEach(personas) { persona in
-                PersonaTile(
-                    persona: persona,
-                    isSelected: selectedPersona?.persistentModelID == persona.persistentModelID
-                ) {
-                    selectedPersona = selectedPersona?.persistentModelID == persona.persistentModelID ? nil : persona
-                }
-            }
         }
     }
 
@@ -237,8 +152,8 @@ struct LauncherView: View {
                 spacing: 12
             ) {
                 ForEach(models) { item in
-                    ModelTile(item: item, persona: selectedPersona,
-                              onTap: { onLaunch(item, selectedPersona) },
+                    ModelTile(item: item,
+                              onTap: { onLaunch(item) },
                               onUnload: onUnload.map { fn in { await fn(item) } },
                               onPin: onPin.map { fn in { Task<Void, Never> { await fn(item) } } },
                               onUnpin: onUnpin.map { fn in { Task<Void, Never> { await fn(item) } } })
@@ -462,163 +377,10 @@ private struct ServerTab: View {
     }
 }
 
-// MARK: - Persona tile
-
-private struct PersonaTile: View {
-    let persona: Persona
-    let isSelected: Bool
-    let onTap: () -> Void
-    @State private var hovering = false
-    @State private var showingEdit = false
-
-    var body: some View {
-        Button(action: onTap) {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
-                    Image(systemName: persona.icon)
-                        .font(.system(size: 13))
-                        .foregroundStyle(isSelected ? Theme.amber : Theme.textLo)
-                    Text(persona.name)
-                        .font(.system(size: 12.5, weight: .medium))
-                        .foregroundStyle(isSelected ? Theme.amber : Theme.textHi)
-                }
-                Text(persona.tagline)
-                    .font(Theme.metric(9))
-                    .foregroundStyle(Theme.textFaint)
-                    .lineLimit(1)
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .background(
-                isSelected ? Theme.amber.opacity(0.10) :
-                hovering   ? Theme.fillHi : Color.white.opacity(0.02),
-                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .strokeBorder(
-                        isSelected ? Theme.amber.opacity(0.5) : Theme.line,
-                        lineWidth: 1
-                    )
-            )
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering = $0 }
-        .help(isSelected ? "Deselect persona" : "Use \(persona.name) persona")
-        .contextMenu {
-            Button("Edit Persona") { showingEdit = true }
-        }
-        .popover(isPresented: $showingEdit) {
-            PersonaEditPopover(persona: persona)
-        }
-    }
-}
-
-// MARK: - Persona edit popover
-
-private struct PersonaEditPopover: View {
-    @Bindable var persona: Persona
-    @FocusState private var focus: Field?
-
-    private enum Field { case name, icon, tagline, prompt }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            // Header: icon preview + name field
-            HStack(spacing: 10) {
-                Image(systemName: validIcon)
-                    .font(.system(size: 16))
-                    .foregroundStyle(Theme.amber)
-                    .frame(width: 24)
-                TextField("Name", text: $persona.name)
-                    .textFieldStyle(.plain)
-                    .font(Theme.mono(13, weight: .semibold))
-                    .foregroundStyle(Theme.textHi)
-                    .focused($focus, equals: .name)
-            }
-
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Eyebrow("Icon (SF Symbol)", size: 9)
-                    TextField("e.g. brain", text: $persona.icon)
-                        .textFieldStyle(.plain)
-                        .focused($focus, equals: .icon)
-                        .modifier(PopoverFieldChrome(focused: focus == .icon))
-                        .frame(width: 130)
-                }
-                VStack(alignment: .leading, spacing: 6) {
-                    Eyebrow("Tagline", size: 9)
-                    TextField("Brief descriptor", text: $persona.tagline)
-                        .textFieldStyle(.plain)
-                        .focused($focus, equals: .tagline)
-                        .modifier(PopoverFieldChrome(focused: focus == .tagline))
-                }
-            }
-
-            VStack(alignment: .leading, spacing: 6) {
-                Eyebrow("System Prompt", size: 9)
-                TextEditor(text: $persona.systemPrompt)
-                    .font(Theme.metric(12))
-                    .foregroundStyle(Theme.textHi)
-                    .scrollContentBackground(.hidden)
-                    .scrollIndicators(.hidden)
-                    .hideScrollIndicators()
-                    .focused($focus, equals: .prompt)
-                    .frame(minHeight: 80, maxHeight: 160)
-                    .padding(.horizontal, 11)
-                    .padding(.vertical, 8)
-                    .background(Theme.windowBG,
-                                in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(
-                                focus == .prompt
-                                    ? Theme.amber.opacity(0.85)
-                                    : Color.white.opacity(0.10),
-                                lineWidth: 1
-                            )
-                    )
-                    .animation(.easeOut(duration: 0.15), value: focus == .prompt)
-            }
-        }
-        .padding(20)
-        .frame(width: 340)
-        .background(Theme.windowBG)
-        .preferredColorScheme(Theme.active.scheme)
-    }
-
-    private var validIcon: String {
-        NSImage(systemSymbolName: persona.icon, accessibilityDescription: nil) != nil
-            ? persona.icon : "person"
-    }
-}
-
-private struct PopoverFieldChrome: ViewModifier {
-    let focused: Bool
-
-    func body(content: Content) -> some View {
-        content
-            .font(Theme.metric(12))
-            .foregroundStyle(Theme.textHi)
-            .padding(.horizontal, 11)
-            .padding(.vertical, 8)
-            .background(Theme.windowBG, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(
-                        focused ? Theme.amber.opacity(0.85) : Color.white.opacity(0.10),
-                        lineWidth: 1
-                    )
-            )
-            .animation(.easeOut(duration: 0.15), value: focused)
-    }
-}
-
 // MARK: - Model tile
 
 private struct ModelTile: View {
     let item: DiscoveredModel
-    let persona: Persona?
     let onTap: () -> Void
     var onUnload: (() async -> Void)? = nil
     var onPin: (() -> Void)? = nil
@@ -735,18 +497,10 @@ private struct ModelTile: View {
                     Spacer(minLength: 0)
                     // CTA when hovering
                     if hovering && !isLoading {
-                        HStack(spacing: 4) {
-                            if let p = persona {
-                                Text("as \(p.name)")
-                                    .font(Theme.label(9))
-                                    .tracking(0.5)
-                                    .foregroundStyle(Theme.amber)
-                            }
-                            Image(systemName: "arrow.right")
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundStyle(Theme.amber)
-                        }
-                        .transition(.opacity.combined(with: .move(edge: .trailing)))
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(Theme.amber)
+                            .transition(.opacity.combined(with: .move(edge: .trailing)))
                     }
                 }
                 .animation(.easeOut(duration: 0.12), value: hovering)
@@ -768,12 +522,5 @@ private struct ModelTile: View {
         .disabled(isLoading)
         .help("Start a chat with \(model.familyName)")
     }
-}
-
-// MARK: - PreferenceKeys for persona scroll fade
-
-private struct PersonaScrollKey: PreferenceKey {
-    static var defaultValue: CGPoint = .zero
-    static func reduce(value: inout CGPoint, nextValue: () -> CGPoint) { value = nextValue() }
 }
 
