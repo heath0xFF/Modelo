@@ -207,8 +207,12 @@ private struct MemoryEditPane: View {
     }
 
     private func deleteMemory() {
-        try? MemoryStore.delete(name: memory.name, scope: scope)
-        onDeleted()
+        do {
+            try MemoryStore.delete(name: memory.name, scope: scope)
+            onDeleted()
+        } catch {
+            saveError = error.localizedDescription
+        }
     }
 
     @ViewBuilder
