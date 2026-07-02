@@ -269,6 +269,7 @@ struct MenuBarChatView: View {
             } catch is CancellationError {
                 // User tapped stop — leave partial text in messages if any.
             } catch {
+                Log.chat.error("Menu-bar chat stream failed: \(error.localizedDescription, privacy: .public)")
                 errorText = error.localizedDescription
             }
 

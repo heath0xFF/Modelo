@@ -71,7 +71,10 @@ final class GPUMonitor {
         let pipe = Pipe()
         proc.standardOutput = pipe
         proc.standardError = nil
-        do { try proc.run() } catch { return }
+        do { try proc.run() } catch {
+            Log.monitor.error("macmon failed to start: \(error.localizedDescription, privacy: .public)")
+            return
+        }
         macmonProcess = proc
         macmonTask = Task { [weak self] in
             do {
@@ -84,6 +87,7 @@ final class GPUMonitor {
             } catch {
                 // macmon ended or the read failed — clear the samples so the UI doesn't
                 // keep presenting the last reading as if it were live.
+                Log.monitor.error("macmon stream ended: \(error.localizedDescription, privacy: .public)")
                 for id in ids { self?.snapshots[id] = nil }
             }
         }

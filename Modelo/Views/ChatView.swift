@@ -105,7 +105,7 @@ struct ChatView: View {
                 if let picked = newValue {
                     conversation.modelID = picked.model.id
                     conversation.serverID = picked.server.id
-                    try? context.save()
+                    context.saveOrLog()
                 }
             }
         )
@@ -374,7 +374,7 @@ struct ChatView: View {
                         .fixedSize()
                         .help("Apply a saved preset to this chat")
                     }
-                    Button("Reset") { conversation.samplingOverride = SamplingParams(); try? context.save() }
+                    Button("Reset") { conversation.samplingOverride = SamplingParams(); context.saveOrLog() }
                         .font(Theme.metric(11))
                         .buttonStyle(.plain)
                         .foregroundStyle(Theme.textDim)
@@ -398,8 +398,8 @@ struct ChatView: View {
             }
             .padding(16)
             .frame(width: 320)
-            .onChange(of: conversation.samplingOverride) { try? context.save() }
-            .onChange(of: conversation.autoCompact) { try? context.save() }
+            .onChange(of: conversation.samplingOverride) { context.saveOrLog() }
+            .onChange(of: conversation.autoCompact) { context.saveOrLog() }
         }
     }
 
@@ -426,7 +426,7 @@ struct ChatView: View {
                     Button("Reset") {
                         conversation.yoloEnabled = false
                         conversation.maxToolRoundsOverride = nil
-                        try? context.save()
+                        context.saveOrLog()
                     }
                     .font(Theme.metric(11))
                     .buttonStyle(.plain)
@@ -471,7 +471,7 @@ struct ChatView: View {
                 if conversation.maxToolRoundsOverride != nil {
                     Button("Use default (\(maxToolRounds))") {
                         conversation.maxToolRoundsOverride = nil
-                        try? context.save()
+                        context.saveOrLog()
                     }
                     .font(Theme.metric(11))
                     .buttonStyle(.plain)
@@ -480,8 +480,8 @@ struct ChatView: View {
             }
             .padding(16)
             .frame(width: 320)
-            .onChange(of: conversation.yoloEnabled) { try? context.save() }
-            .onChange(of: conversation.maxToolRoundsOverride) { try? context.save() }
+            .onChange(of: conversation.yoloEnabled) { context.saveOrLog() }
+            .onChange(of: conversation.maxToolRoundsOverride) { context.saveOrLog() }
         }
     }
 
@@ -559,7 +559,7 @@ struct ChatView: View {
     /// Applies a preset's system prompt (if any) and sampling overrides to this chat.
     private func apply(_ preset: Preset) {
         conversation.apply(preset)
-        try? context.save()
+        context.saveOrLog()
     }
 
     // MARK: Message stream
@@ -920,7 +920,7 @@ struct ChatView: View {
     private func setPersona(_ persona: Persona?) {
         conversation.systemPrompt = persona?.systemPrompt
         conversation.personaName = persona?.name
-        try? context.save()
+        context.saveOrLog()
     }
 
     private var composer: some View {
@@ -1147,14 +1147,14 @@ struct ChatView: View {
         panel.message = "Choose the folder the model can read and write on this Mac."
         guard panel.runModal() == .OK, let url = panel.url else { return }
         conversation.projectPath = url.path
-        do { try context.save() } catch { print("[ChatView] workspace save failed: \(error)") }
+        context.saveOrLog()
         rebuildSession()
     }
 
     /// Clears the workspace so the model loses local file access for this chat.
     private func clearWorkspace() {
         conversation.projectPath = nil
-        do { try context.save() } catch { print("[ChatView] workspace clear failed: \(error)") }
+        context.saveOrLog()
         rebuildSession()
     }
 
@@ -1178,7 +1178,7 @@ struct ChatView: View {
     /// (the tail of that branch's subtree). Wired to MessageRow's ◀ k/n ▶ control.
     private func selectBranch(_ leaf: Message) {
         conversation.activeLeaf = leaf
-        try? context.save()
+        context.saveOrLog()
     }
 
     // MARK: Slash commands (§3.1)
@@ -1193,7 +1193,7 @@ struct ChatView: View {
             conversation.summary = nil
             conversation.summaryThroughData = nil
             conversation.activeLeafData = nil
-            try? context.save()
+            context.saveOrLog()
             flash("Cleared this conversation.")
         case .export:
             if let url = ConversationExporter.writeToDownloads(conversation) {
@@ -1228,11 +1228,11 @@ struct ChatView: View {
         case .temperature(let value):
             let clamped = min(max(value, 0), 2)
             conversation.temperature = clamped
-            try? context.save()
+            context.saveOrLog()
             flash(String(format: "Temperature set to %.2f for this chat.", clamped))
         case .system(let prompt):
             conversation.systemPrompt = prompt.isEmpty ? nil : prompt
-            try? context.save()
+            context.saveOrLog()
             flash(prompt.isEmpty ? "Cleared the system prompt." : "System prompt updated.")
         case .model(let query):
             if let match = discovered.first(where: {
@@ -1242,7 +1242,7 @@ struct ChatView: View {
                 pickedModel = match
                 conversation.modelID = match.model.id
                 conversation.serverID = match.server.id
-                try? context.save()
+                context.saveOrLog()
                 flash("Switched to \(match.model.familyName).")
             } else {
                 flash("No model matches “\(query)”.")

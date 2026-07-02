@@ -29,6 +29,7 @@ enum BranchingMigration {
             defaults.set(true, forKey: flagKey)
         } catch {
             // Leave the flag unset so the backfill retries on the next launch.
+            Log.data.error("Branching backfill failed (will retry next launch): \(error.localizedDescription, privacy: .public)")
         }
     }
 

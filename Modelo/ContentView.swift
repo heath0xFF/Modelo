@@ -222,7 +222,7 @@ struct ContentView: View {
         let convo = Conversation(modelID: pickedModel?.model.id ?? "",
                                  serverID: pickedModel?.server.id)
         context.insert(convo)
-        try? context.save()
+        context.saveOrLog()
         route = .conversation(convo.persistentModelID)
     }
 
@@ -237,12 +237,13 @@ struct ContentView: View {
                 await refreshModels()
             } catch {
                 // If loading fails, still proceed - the error will surface in chat
+                Log.network.error("Model load before launch failed for \(model.model.id, privacy: .public): \(error.localizedDescription, privacy: .public)")
             }
         }
         pickedModel = model
         let convo = Conversation(modelID: model.model.id, serverID: model.server.id)
         context.insert(convo)
-        try? context.save()
+        context.saveOrLog()
         route = .conversation(convo.persistentModelID)
     }
 
@@ -353,12 +354,15 @@ struct ContentView: View {
             for try await event in stream {
                 if case .delta(let t) = event { raw += t }
             }
-        } catch { return }
+        } catch {
+            Log.chat.error("Title generation stream failed: \(error.localizedDescription, privacy: .public)")
+            return
+        }
 
         let title = ChatSession.cleanTitle(raw)
         guard !title.isEmpty, convo.modelContext != nil else { return }
         convo.title = title
-        try? context.save()
+        context.saveOrLog()
     }
 
     /// Re-discover when a server is added/edited/removed (or comes online), not just
@@ -390,7 +394,7 @@ struct ContentView: View {
         convo.systemPrompt = systemPrompt
         convo.projectPath = project.path
         context.insert(convo)
-        try? context.save()
+        context.saveOrLog()
         route = .conversation(convo.persistentModelID)
     }
 
@@ -456,7 +460,8 @@ struct ContentView: View {
                 pickedModel = nil
             }
         } catch {
-            // Silently ignore — state will reconcile on next refresh
+            // State will reconcile on next refresh.
+            Log.network.error("Model eject failed for \(item.model.id, privacy: .public): \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -467,7 +472,8 @@ struct ContentView: View {
             try await client.setKeepInRam(modelID: modelID, keepInRam: true, endpoint: endpoint)
             await refreshModels()
         } catch {
-            // Silently ignore — state will reconcile on next refresh
+            // State will reconcile on next refresh.
+            Log.network.error("Model pin failed for \(modelID, privacy: .public): \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -478,7 +484,8 @@ struct ContentView: View {
             try await client.setKeepInRam(modelID: modelID, keepInRam: false, endpoint: endpoint)
             await refreshModels()
         } catch {
-            // Silently ignore — state will reconcile on next refresh
+            // State will reconcile on next refresh.
+            Log.network.error("Model unpin failed for \(modelID, privacy: .public): \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -500,6 +507,7 @@ struct ContentView: View {
             return true
         } catch {
             // Loading failed - don't change selection
+            Log.network.error("Model load on selection failed for \(item.model.id, privacy: .public): \(error.localizedDescription, privacy: .public)")
             return false
         }
     }

@@ -36,7 +36,10 @@ enum ConversationExporter {
         do {
             try markdown(for: conversation).write(to: url, atomically: true, encoding: .utf8)
             return url
-        } catch { return nil }
+        } catch {
+            Log.app.error("Conversation export failed: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
     }
 
     /// Filesystem-safe slug from a title.

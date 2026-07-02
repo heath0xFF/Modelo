@@ -31,7 +31,7 @@ struct PersonasManagerView: View {
                                 onDelete: {
                                     let deletingSelected = persona.id == selectedPersonaID
                                     context.delete(persona)
-                                    try? context.save()
+                                    context.saveOrLog()
                                     if deletingSelected {
                                         selectedPersonaID = personas.first(where: { $0.id != persona.id })?.id
                                     }
@@ -100,7 +100,7 @@ struct PersonasManagerView: View {
         let persona = Persona(name: "New Persona", icon: "person",
                               tagline: "", systemPrompt: "", sortOrder: nextOrder)
         context.insert(persona)
-        try? context.save()
+        context.saveOrLog()
         selectedPersonaID = persona.id
     }
 }

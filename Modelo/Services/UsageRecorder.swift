@@ -14,6 +14,6 @@ struct UsageRecorder {
             promptTokens: promptTokens, completionTokens: completionTokens,
             tokensPerSecond: tokensPerSecond, ttftMillis: ttftMillis
         ))
-        try? context.save()
+        context.saveOrLog()
     }
 }

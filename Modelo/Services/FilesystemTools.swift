@@ -423,6 +423,7 @@ enum Shell {
                 } else { lock.unlock() }
             }
             do { try proc.run() } catch {
+                Log.tools.error("Shell command failed to start: \(error.localizedDescription, privacy: .public)")
                 cont.resume(returning: ("Failed to start command: \(error.localizedDescription)", -1))
                 return
             }
