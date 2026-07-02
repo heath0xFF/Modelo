@@ -57,6 +57,8 @@ struct ChatView: View {
     // Max agentic tool rounds per turn — configurable in Settings ▸ Tools, applied to
     // the session at creation and kept in sync while the chat is open.
     @AppStorage("globalMaxToolRounds") private var maxToolRounds = ChatSession.defaultMaxToolRounds
+    // Global YOLO mode (Settings ▸ Tools) — ORed with the per-chat switch below.
+    @AppStorage("yoloModeEnabled") private var globalYolo = false
     // First-party filesystem/shell tools — opt-in, off by default (Settings ▸ Tools).
     @AppStorage(FSToolSettings.enabledKey) private var fsToolsEnabled = false
     @AppStorage(FSToolSettings.shellKey)   private var shellToolEnabled = false
@@ -64,6 +66,7 @@ struct ChatView: View {
     @Query(sort: \Preset.sortOrder) private var presets: [Preset]
     @State private var showSampling = false
     @State private var showBenchmark = false
+    @State private var showAgentControls = false
 
     /// Identity key for this conversation's session/task in the shared store.
     private var convoID: PersistentIdentifier { conversation.persistentModelID }
@@ -144,6 +147,18 @@ struct ChatView: View {
         return conversation.samplingOverride.overlaying(global)
     }
 
+    /// YOLO for this chat: the global setting or the per-conversation switch.
+    /// When on, mutating tools run unprompted and the round cap is lifted.
+    private var effectiveYolo: Bool {
+        globalYolo || conversation.yoloEnabled
+    }
+
+    /// Tool-round cap for this chat: the per-conversation override, else the
+    /// global Settings value (same resolution idiom as `effectiveSampling`).
+    private var effectiveMaxRounds: Int {
+        conversation.maxToolRoundsOverride ?? maxToolRounds
+    }
+
     /// Artifacts across the active path, grouped into versions (§2.4).
     private var artifactGroups: [ArtifactGroup] { ArtifactCollector.groups(from: pathMessages) }
     private var openArtifactGroup: ArtifactGroup? {
@@ -191,8 +206,10 @@ struct ChatView: View {
         .onAppear { ensureSession() }
         // No .onDisappear cancel: a turn keeps streaming after the user leaves the
         // chat, so multiple conversations can run at once (the store owns it).
-        // Keep an open chat's tool-call cap in sync with the Settings ▸ Tools value.
-        .onChange(of: maxToolRounds) { session?.maxToolRounds = maxToolRounds }
+        // Keep an open chat's tool-call cap and YOLO mode in sync with the Settings
+        // values and the per-chat overrides (agent popover).
+        .onChange(of: effectiveMaxRounds) { session?.maxToolRounds = effectiveMaxRounds }
+        .onChange(of: effectiveYolo) { session?.yoloMode = effectiveYolo }
         .onChange(of: openArtifactID) { old, new in
             if let new { lastArtifactID = new }
             withAnimation(.easeOut(duration: 0.2)) {
@@ -226,6 +243,9 @@ struct ChatView: View {
                 workspaceButton
                 artifactsButton
                 samplingButton
+                if pickedModel?.model.supportsToolUse == true {
+                    agentButton
+                }
                 benchmarkButton
                 FontSizeControl(size: $messageFontSize)
                 Spacer(minLength: 8)
@@ -371,6 +391,88 @@ struct ChatView: View {
             .frame(width: 320)
             .onChange(of: conversation.samplingOverride) { context.saveOrLog() }
             .onChange(of: conversation.autoCompact) { context.saveOrLog() }
+        }
+    }
+
+    /// Per-chat agent behavior: the YOLO switch and the tool-call limit override.
+    /// Red when YOLO is effective, amber when only the limit is overridden.
+    private var agentButton: some View {
+        let tint: Color = effectiveYolo ? Theme.Palette.alert
+            : conversation.maxToolRoundsOverride != nil ? Theme.amber
+            : Theme.Palette.inkDim
+        return Button { showAgentControls.toggle() } label: {
+            Image(systemName: "bolt")
+                .font(.system(size: 12))
+                .foregroundStyle(tint)
+                .frame(width: 30, height: 26)
+                .panel(Theme.Palette.panel, radius: 7)
+        }
+        .buttonStyle(.plain)
+        .help("Tool approvals and limit for this chat")
+        .popover(isPresented: $showAgentControls, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Eyebrow("Agent · this chat")
+                    Spacer()
+                    Button("Reset") {
+                        conversation.yoloEnabled = false
+                        conversation.maxToolRoundsOverride = nil
+                        try? context.save()
+                    }
+                    .font(Theme.metric(11))
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Theme.textDim)
+                    .help("Turn off YOLO and use the global tool-call limit")
+                }
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("YOLO mode").font(Theme.metric(12)).foregroundStyle(Theme.textMid)
+                        Text("Run writes, edits and shell commands without asking; no tool-call limit.")
+                            .font(Theme.metric(10)).foregroundStyle(Theme.textFaint)
+                    }
+                    Spacer()
+                    PillToggle(isOn: globalYolo ? .constant(true) : $conversation.yoloEnabled)
+                        .disabled(globalYolo)
+                }
+                if globalYolo {
+                    Text("Enabled globally in Settings ▸ Tools.")
+                        .font(Theme.metric(10)).foregroundStyle(Theme.textFaint)
+                }
+                Divider().overlay(Theme.line)
+                Stepper(value: Binding(get: { conversation.maxToolRoundsOverride ?? maxToolRounds },
+                                       set: { conversation.maxToolRoundsOverride = $0 == maxToolRounds ? nil : $0 }),
+                        in: 1...20) {
+                    HStack(spacing: 8) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Max tool calls per turn").font(Theme.metric(12)).foregroundStyle(Theme.textMid)
+                            Text("Overrides the Settings default for this chat only.")
+                                .font(Theme.metric(10)).foregroundStyle(Theme.textFaint)
+                        }
+                        Spacer(minLength: 8)
+                        if effectiveYolo {
+                            Text("Unlimited").font(Theme.metric(11)).foregroundStyle(Theme.Palette.alert)
+                        } else {
+                            Text("\(effectiveMaxRounds)")
+                                .font(.mono(13)).monospacedDigit()
+                                .foregroundStyle(conversation.maxToolRoundsOverride != nil ? Theme.amber : Theme.textMid)
+                        }
+                    }
+                }
+                .disabled(effectiveYolo)
+                if conversation.maxToolRoundsOverride != nil {
+                    Button("Use default (\(maxToolRounds))") {
+                        conversation.maxToolRoundsOverride = nil
+                        try? context.save()
+                    }
+                    .font(Theme.metric(11))
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Theme.textDim)
+                }
+            }
+            .padding(16)
+            .frame(width: 320)
+            .onChange(of: conversation.yoloEnabled) { try? context.save() }
+            .onChange(of: conversation.maxToolRoundsOverride) { try? context.save() }
         }
     }
 
@@ -536,6 +638,24 @@ struct ChatView: View {
                         .font(.system(size: 11))
                         .foregroundStyle(Theme.Palette.alert)
                     Text(error)
+                        .font(Theme.metric(11))
+                        .foregroundStyle(Theme.Palette.alert)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity)
+                .background(Theme.Palette.alert.opacity(0.10))
+            }
+
+            // Standing cue that this chat runs tools unattended (YOLO mode).
+            // Guard on supportsToolUse so the banner doesn't show on non-tool models.
+            if effectiveYolo && pickedModel?.model.supportsToolUse == true {
+                HStack(spacing: 8) {
+                    Image(systemName: "bolt.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.Palette.alert)
+                    Text("YOLO mode — tool calls run without approval")
                         .font(Theme.metric(11))
                         .foregroundStyle(Theme.Palette.alert)
                     Spacer(minLength: 0)
@@ -903,7 +1023,8 @@ struct ChatView: View {
                                   keychain: keychain,
                                   registry: ToolRegistry(tools),
                                   systemSuffix: combinedSystemSuffix,
-                                  maxToolRounds: maxToolRounds)
+                                  maxToolRounds: effectiveMaxRounds,
+                                  yoloMode: effectiveYolo)
         // Notify when a reply finishes and the user has moved to another chat/app.
         // `conversation` is read at completion time so the title/snippet are current.
         let id = convoID
