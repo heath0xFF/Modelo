@@ -157,9 +157,23 @@ struct SidebarView: View {
 
     @ViewBuilder
     private var projectsSection: some View {
+        let expanded = sectionExpanded("§projects")
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Eyebrow("Projects")
+            HStack(spacing: 0) {
+                Button {
+                    withAnimation(.snappy(duration: 0.2)) { toggleSection("§projects") }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(Theme.textMute)
+                            .frame(width: 8)
+                        Eyebrow("Projects")
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(expanded ? "Collapse Projects" : "Expand Projects")
                 Spacer()
                 Button { projectStore.addProject() } label: {
                     Image(systemName: "plus")
@@ -173,19 +187,21 @@ struct SidebarView: View {
             .padding(.top, 24)
             .padding(.bottom, 10)
 
-            if projectStore.projects.isEmpty {
-                emptyLabel("No projects yet")
-            } else {
-                ForEach(projectStore.projects) { project in
-                    projectRow(project)
-                        .contextMenu {
-                            Button(role: .destructive) {
-                                if case .project(let id) = route, id == project.id { route = nil }
-                                projectStore.remove(project)
-                            } label: {
-                                Label("Remove Project", systemImage: "trash")
+            if expanded {
+                if projectStore.projects.isEmpty {
+                    emptyLabel("No projects yet")
+                } else {
+                    ForEach(projectStore.projects) { project in
+                        projectRow(project)
+                            .contextMenu {
+                                Button(role: .destructive) {
+                                    if case .project(let id) = route, id == project.id { route = nil }
+                                    projectStore.remove(project)
+                                } label: {
+                                    Label("Remove Project", systemImage: "trash")
+                                }
                             }
-                        }
+                    }
                 }
             }
         }
@@ -216,9 +232,23 @@ struct SidebarView: View {
 
     @ViewBuilder
     private var conversationsSection: some View {
+        let expanded = sectionExpanded("§conversations")
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Eyebrow("Conversations")
+            HStack(spacing: 0) {
+                Button {
+                    withAnimation(.snappy(duration: 0.2)) { toggleSection("§conversations") }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(Theme.textMute)
+                            .frame(width: 8)
+                        Eyebrow("Conversations")
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(expanded ? "Collapse Conversations" : "Expand Conversations")
                 Spacer()
                 Button {
                     pendingFolderConversation = nil
@@ -236,15 +266,17 @@ struct SidebarView: View {
             .padding(.top, 24)
             .padding(.bottom, 10)
 
-            searchField
-                .padding(.bottom, 14)
+            if expanded {
+                searchField
+                    .padding(.bottom, 14)
 
-            if conversations.isEmpty {
-                emptyLabel("No conversations yet")
-            } else if filteredConversations.isEmpty {
-                emptyLabel("No matches")
-            } else {
-                conversationSections
+                if conversations.isEmpty {
+                    emptyLabel("No conversations yet")
+                } else if filteredConversations.isEmpty {
+                    emptyLabel("No matches")
+                } else {
+                    conversationSections
+                }
             }
         }
     }
