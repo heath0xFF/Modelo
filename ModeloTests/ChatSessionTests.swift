@@ -7,6 +7,7 @@ final class FakeProvider: ChatProvider {
     let scripts: [[StreamEvent]]
     private(set) var callCount = 0
     private(set) var lastTools: [ToolSpec]?
+    private(set) var systemPrompts: [String] = []
     init(scripts: [[StreamEvent]]) { self.scripts = scripts }
     convenience init(events: [StreamEvent]) { self.init(scripts: [events]) }
 
@@ -17,6 +18,7 @@ final class FakeProvider: ChatProvider {
         let events = scripts[min(callCount, scripts.count - 1)]
         callCount += 1
         lastTools = tools
+        systemPrompts.append(systemPrompt)
         return AsyncThrowingStream { continuation in
             for e in events { continuation.yield(e) }
             continuation.finish()
@@ -157,6 +159,38 @@ final class ChatSessionTests: XCTestCase {
         XCTAssertTrue(convo.messages.contains { $0.role == .assistant && $0.content == "Final answer" })
         XCTAssertEqual(provider.callCount, 2)
         XCTAssertNotNil(provider.lastTools)
+    }
+
+    /// End-to-end memory loop: the model calls save_memory in round 1, and because
+    /// the systemSuffix provider re-evaluates each round, round 2's system prompt
+    /// already carries the index line for the just-saved memory.
+    func test_send_saveMemory_indexAppearsNextRound() async throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "memory-e2e-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let context = try makeContext()
+        let provider = FakeProvider(scripts: [
+            [.toolCalls([ToolCall(id: "c1", name: "save_memory", arguments:
+                #"{"name":"prefers-tabs","description":"Tabs over spaces","content":"Heath prefers tabs."}"#)])],
+            [.delta("Noted."), .usage(promptTokens: 20, completionTokens: 2)]
+        ])
+        let session = ChatSession(client: provider, context: context,
+                                  recorder: UsageRecorder(context: context),
+                                  registry: ToolRegistry([SaveMemoryTool(scopes: [.global], root: root)]),
+                                  systemSuffix: { MemoryStore.indexInjection(scopes: [.global], toolsAvailable: $0, root: root) })
+        let server = Server(label: "Studio", host: "studio"); context.insert(server)
+        let convo = Conversation(modelID: "m", serverID: server.id); context.insert(convo)
+
+        await session.send("Remember I prefer tabs", in: convo, server: server, modelSupportsTools: true)
+
+        // The file landed, without any approval pause.
+        XCTAssertEqual(MemoryStore.list(.global, root: root).map(\.name), ["prefers-tabs"])
+        XCTAssertTrue(convo.messages.contains { $0.role == .tool && $0.content.contains("prefers-tabs") })
+        // Round 1 had no memories; round 2's prompt carries the fresh index.
+        XCTAssertEqual(provider.systemPrompts.count, 2)
+        XCTAssertFalse(provider.systemPrompts[0].contains("## Memory"))
+        XCTAssertTrue(provider.systemPrompts[1].contains("- [global] prefers-tabs — Tabs over spaces"))
     }
 
     func test_send_capsToolRounds() async throws {

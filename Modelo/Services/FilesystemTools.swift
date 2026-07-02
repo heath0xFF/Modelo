@@ -86,6 +86,14 @@ struct WorkspaceScope: Sendable {
         guard resolved.path == rootPath || resolved.path.hasPrefix(rootPath + "/") else {
             throw FSToolError.outsideWorkspace(path)
         }
+        // The memory store lives under `~/.modelo` too (the default workspace) — keep
+        // generic filesystem tools out of it so `save_memory`'s size cap and name
+        // slugging can't be sidestepped: files there feed every future conversation's
+        // system prompt.
+        let memoryPath = MemoryStore.defaultRoot.standardizedFileURL.resolvingSymlinksInPath().path
+        if resolved.path == memoryPath || resolved.path.hasPrefix(memoryPath + "/") {
+            throw FSToolError.badArguments("\"\(path)\" is inside the managed memory store; use save_memory instead")
+        }
         return resolved
     }
 

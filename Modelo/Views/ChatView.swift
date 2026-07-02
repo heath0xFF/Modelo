@@ -63,6 +63,7 @@ struct ChatView: View {
     @AppStorage(FSToolSettings.enabledKey) private var fsToolsEnabled = false
     @AppStorage(FSToolSettings.shellKey)   private var shellToolEnabled = false
     @AppStorage(FSToolSettings.rootKey)    private var fsToolsRoot = ""
+    @AppStorage(MemoryStore.enabledKey)    private var memoryEnabled = false
     @Query(sort: \Preset.sortOrder) private var presets: [Preset]
     @Query(sort: \Persona.sortOrder) private var personas: [Persona]
     @State private var showSampling = false
@@ -1114,11 +1115,31 @@ struct ChatView: View {
         // Expose ~/.agents skills via a use_skill tool (§3.7).
         let skills = AgentsLoader.loadSkills()
         if !skills.isEmpty { tools.append(UseSkillTool(skills: skills)) }
+        // Persistent memory (opt-in, Settings ▸ Memory). Project chats get both scopes.
+        var memoryScopes: [MemoryScope] = [.global]
+        if let path = conversation.projectPath, !path.isEmpty { memoryScopes.append(.project(path: path)) }
+        if memoryEnabled {
+            tools += [SaveMemoryTool(scopes: memoryScopes), ReadMemoryTool(scopes: memoryScopes)]
+        }
+        // The memory flag is snapshotted here so the injected index and the registered
+        // tools always agree (never a prompt commanding tools that aren't offered).
+        // Toggling Settings ▸ Memory invalidates all sessions via ContentView, so open
+        // chats rebuild against the new setting on their next message. The file listing
+        // itself stays live per round — a memory saved in round 1 is in the prompt from
+        // round 2 with no rebuild.
+        let staticSuffix = combinedSystemSuffix
+        let includeMemory = memoryEnabled
         let session = ChatSession(client: LMStudioClient.shared, context: context,
                                   recorder: UsageRecorder(context: context),
                                   keychain: keychain,
                                   registry: ToolRegistry(tools),
-                                  systemSuffix: combinedSystemSuffix,
+                                  systemSuffix: { toolsActive in
+                                      let memoryIndex = includeMemory
+                                          ? MemoryStore.indexInjection(scopes: memoryScopes,
+                                                                       toolsAvailable: toolsActive) : nil
+                                      let parts = [staticSuffix, memoryIndex].compactMap(\.self).filter { !$0.isEmpty }
+                                      return parts.isEmpty ? nil : parts.joined(separator: "\n\n")
+                                  },
                                   maxToolRounds: effectiveMaxRounds,
                                   yoloMode: effectiveYolo)
         // Notify when a reply finishes and the user has moved to another chat/app.
@@ -1287,6 +1308,10 @@ struct ChatView: View {
     }
 
     private func send() {
+        // The session may have been invalidated by a settings change (e.g. the memory
+        // toggle) since this view appeared — rebuild it lazily rather than dropping
+        // the send.
+        ensureSession()
         guard let session else { return }
         // Slash commands (§3.1) are handled locally, never sent to the model.
         if let command = SlashParser.parse(draft) {

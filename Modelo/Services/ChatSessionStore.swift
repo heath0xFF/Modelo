@@ -49,4 +49,14 @@ final class ChatSessionStore {
         sessions[id]?.cancelPendingWork()
         sessions[id] = nil
     }
+
+    /// Drops every session so the next message in each chat rebuilds it against
+    /// current settings (e.g. the Settings ▸ Memory toggle, whose tool registration
+    /// is fixed at session build). In-flight turns are not cancelled — they finish
+    /// against the old session, and a replacement turn cancels via `setTask`.
+    /// Pending approvals are released so their continuations can't leak.
+    func invalidateSessions() {
+        for session in sessions.values { session.cancelPendingWork() }
+        sessions.removeAll()
+    }
 }

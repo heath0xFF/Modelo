@@ -30,6 +30,16 @@ final class FilesystemToolsTests: XCTestCase {
         XCTAssertThrowsError(try scope.resolve("/etc/passwd"))
     }
 
+    func test_scope_rejectsManagedMemoryStore() {
+        // Even a workspace that legitimately contains ~/.modelo must keep generic
+        // tools out of the memory store — its files feed future system prompts and
+        // are only written through save_memory's caps and slugging.
+        let scope = WorkspaceScope(root: FSToolSettings.defaultRoot)
+        XCTAssertThrowsError(try scope.resolve("memory/global/planted.md"))
+        XCTAssertThrowsError(try scope.resolve(MemoryStore.defaultRoot.appending(path: "x.md").path))
+        XCTAssertNoThrow(try scope.resolve("notes.md"))
+    }
+
     // MARK: Write / Read round trip
 
     func test_writeThenRead() async throws {
