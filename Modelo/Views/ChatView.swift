@@ -417,7 +417,7 @@ struct ChatView: View {
                     Button("Reset") {
                         conversation.yoloEnabled = false
                         conversation.maxToolRoundsOverride = nil
-                        try? context.save()
+                        context.saveOrLog()
                     }
                     .font(Theme.metric(11))
                     .buttonStyle(.plain)
@@ -462,7 +462,7 @@ struct ChatView: View {
                 if conversation.maxToolRoundsOverride != nil {
                     Button("Use default (\(maxToolRounds))") {
                         conversation.maxToolRoundsOverride = nil
-                        try? context.save()
+                        context.saveOrLog()
                     }
                     .font(Theme.metric(11))
                     .buttonStyle(.plain)
@@ -471,8 +471,8 @@ struct ChatView: View {
             }
             .padding(16)
             .frame(width: 320)
-            .onChange(of: conversation.yoloEnabled) { try? context.save() }
-            .onChange(of: conversation.maxToolRoundsOverride) { try? context.save() }
+            .onChange(of: conversation.yoloEnabled) { context.saveOrLog() }
+            .onChange(of: conversation.maxToolRoundsOverride) { context.saveOrLog() }
         }
     }
 
