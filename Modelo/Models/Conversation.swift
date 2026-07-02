@@ -18,6 +18,10 @@ final class Conversation {
 
     /// Per-conversation system prompt override; nil = none.
     var systemPrompt: String?
+    /// Name of the persona applied before the first message, for the composer's
+    /// picker label. nil = None / a custom prompt. Cosmetic only — `systemPrompt`
+    /// is the source of truth for what the model actually receives.
+    var personaName: String?
     /// Per-conversation sampling overrides (§1.4); nil = inherit the global default.
     /// `temperature` predates the rest (kept for store compatibility).
     var temperature: Double?

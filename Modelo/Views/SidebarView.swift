@@ -48,6 +48,7 @@ struct SidebarView: View {
 
                 VStack(spacing: 2) {
                     navRow("Models",   icon: "square.grid.2x2",           to: .launcher)
+                    navRow("Personas", icon: "person.2",                  to: .personas)
                     navRow("Status",   icon: "chart.bar",                 to: .status)
                     navRow("Reports",  icon: "chart.line.uptrend.xyaxis", to: .reports)
                     navRow("Settings", icon: "gearshape",                 to: .settings)

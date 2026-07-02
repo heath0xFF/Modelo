@@ -4,6 +4,7 @@ import SwiftData
 /// Sidebar navigation destination.
 enum SidebarRoute: Hashable {
     case launcher
+    case personas
     case status
     case reports
     case settings
@@ -74,7 +75,7 @@ struct ContentView: View {
     private var routeSupportsConsole: Bool {
         switch route {
         case .conversation, .launcher, .project, nil: true
-        case .status, .reports, .settings: false
+        case .status, .reports, .settings, .personas: false
         }
     }
 
@@ -144,6 +145,8 @@ struct ContentView: View {
         switch route {
         case .launcher, nil:
             launcher
+        case .personas:
+            PersonasManagerView()
         case .status:
             ServerStatsView(endpointFilter: $endpointFilter)
         case .reports:
@@ -170,7 +173,7 @@ struct ContentView: View {
         LauncherView(
             discovered: discoveredWithLiveState,
             endpointFilter: $endpointFilter,
-            onLaunch: { model, persona in Task { await launch(model: model, persona: persona) } },
+            onLaunch: { model in Task { await launch(model: model) } },
             onUnload: handleModelEject,
             onPin: { item in await handleModelPin(server: item.server, modelID: item.model.id) },
             onUnpin: { item in await handleModelUnpin(server: item.server, modelID: item.model.id) },
@@ -223,8 +226,9 @@ struct ContentView: View {
         route = .conversation(convo.persistentModelID)
     }
 
-    /// Launcher tile tap — creates a chat pre-bound to a model and optional persona.
-    private func launch(model: DiscoveredModel, persona: Persona?) async {
+    /// Launcher tile tap — creates a chat pre-bound to a model. The persona is
+    /// chosen later from the chat composer's picker.
+    private func launch(model: DiscoveredModel) async {
         // Load the model first if it's an LM Studio model and not loaded
         if model.server.kind == .lmStudio, !model.model.isLoaded {
             let endpoint = Endpoint(server: model.server, keychain: keychain)
@@ -237,7 +241,6 @@ struct ContentView: View {
         }
         pickedModel = model
         let convo = Conversation(modelID: model.model.id, serverID: model.server.id)
-        if let persona { convo.systemPrompt = persona.systemPrompt }
         context.insert(convo)
         try? context.save()
         route = .conversation(convo.persistentModelID)
@@ -275,6 +278,7 @@ struct ContentView: View {
     private func saveRoute(_ route: SidebarRoute?) {
         switch route {
         case .launcher:              storedRoute = "launcher"
+        case .personas:              storedRoute = "personas"
         case .status:                storedRoute = "status"
         case .reports:               storedRoute = "reports"
         case .settings:              storedRoute = "settings"
@@ -295,6 +299,7 @@ struct ContentView: View {
         }
         switch storedRoute {
         case "launcher":  route = .launcher
+        case "personas":  route = .personas
         case "status":    route = .status
         case "reports":   route = .reports
         case "settings":  route = .settings
