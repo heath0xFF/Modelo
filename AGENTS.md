@@ -35,10 +35,9 @@ xcodebuild -project Modelo.xcodeproj -scheme Modelo -configuration Debug \
   CODE_SIGNING_ALLOWED=NO build
 ```
 
-A green build ends in `** BUILD SUCCEEDED **`. Treat any `error:` line as a hard
-failure — a text/grep "verification" that only checks for the presence of strings
-(e.g. `verify_implementation.py`) does **not** prove the code compiles and must not
-be trusted as validation.
+A green build ends in `** BUILD SUCCEEDED **`; any `error:` line is a hard
+failure. Text/grep checks that only assert strings exist do **not** prove the
+code compiles — never accept them as validation.
 
 **Run the test suite** (`ModeloTests`, in-memory SwiftData):
 
@@ -48,14 +47,14 @@ xcodebuild -project Modelo.xcodeproj -scheme Modelo \
   CODE_SIGNING_ALLOWED=NO test
 ```
 
+Run a single suite with `-only-testing:ModeloTests/<SuiteName>`.
+
 **Build a signed Release and install to /Applications.** Use *automatic* signing
 with the local team (derived from the machine's "Apple Development" certificate).
-Do **not** sign manually with `CODE_SIGN_STYLE=Manual` and no profile: that strips
-the `com.apple.application-identifier` entitlement, which the data-protection
-keychain requires (`Modelo.entitlements` + `CODE_SIGN_ENTITLEMENTS` in `project.yml`
-exist precisely to make Xcode embed a Mac Team Provisioning Profile granting it).
-Without it, `KeychainStore` falls back to the legacy login keychain and macOS
-prompts for the keychain password after installs.
+Never sign with `CODE_SIGN_STYLE=Manual` and no profile: that strips the
+`com.apple.application-identifier` entitlement, `KeychainStore` falls back to the
+legacy login keychain, and macOS prompts for a password after every install.
+Full rationale in `Modelo/Modelo.entitlements`.
 
 ```bash
 xcodegen generate   # only needed if files were added/removed
@@ -71,17 +70,15 @@ cp -R build-release/Build/Products/Release/Modelo.app /Applications/
 open /Applications/Modelo.app
 ```
 
-After the build, `codesign -d --entitlements - /Applications/Modelo.app` must list
-`com.apple.application-identifier` and `keychain-access-groups`, and
+Verify the install: `codesign -d --entitlements - /Applications/Modelo.app` must
+list `com.apple.application-identifier` and `keychain-access-groups`, and
 `Contents/embedded.provisionprofile` must exist — if either is missing, secrets
-regress to the prompt-per-install legacy keychain. `codesign --verify --verbose
-/Applications/Modelo.app` should report it valid. Keep `build/` and
-`build-release/` gitignored.
+regress to the prompt-per-install legacy keychain. `codesign --verify --verbose`
+should report the app valid. Keep `build/` and `build-release/` gitignored.
 
-The keychain must be unlocked for codesign to use the signing key, so run this in
-an interactive shell (the `!` prefix in Claude Code works). If macOS asks for a
-password so *codesign* can access the signing key, run this once (it prompts for
-the login password) to whitelist Apple's tools for that key:
+The keychain must be unlocked for codesign to use the signing key, so run this
+in an interactive shell. If macOS prompts for a password on *codesign*'s behalf,
+whitelist Apple's tools for the key once (asks for the login password):
 
 ```bash
 security set-key-partition-list -S apple-tool:,apple:,codesign: -s \
