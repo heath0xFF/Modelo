@@ -63,9 +63,14 @@ final class LMStudioClient: ChatProvider {
             }
             return try await fetch(path: "/v1/models", endpoint: endpoint)
                 .filter { !$0.isEmbeddingModel }
-        case .llamaCpp, .oMLX, .exo:
-            // Generic local OpenAI-compatible servers (llama.cpp/llama-swap, oMLX, exo): no /api/v0.
+        case .llamaCpp, .oMLX:
+            // Generic local OpenAI-compatible servers (llama.cpp/llama-swap, oMLX): no /api/v0.
             return try await fetch(path: "/v1/models", endpoint: endpoint)
+                .filter { !$0.isEmbeddingModel }
+        case .exo:
+            // exo's /v1/models is its full downloadable catalog; the downloaded-only
+            // filter returns just the models present on the machine.
+            return try await fetch(path: "/v1/models?status=downloaded", endpoint: endpoint)
                 .filter { !$0.isEmbeddingModel }
         case .ollama:
             return try await fetch(path: "/v1/models", endpoint: endpoint)

@@ -21,8 +21,8 @@ enum ServerKind: String, Codable, Sendable, CaseIterable {
     /// Local Ollama runtime — OpenAI-compatible /v1, default port 11434.
     case ollama
     /// Local exo cluster runtime — OpenAI-compatible /v1, default port 52415.
-    /// exo's /v1/models lists its whole downloadable catalog; a later task filters
-    /// the model list down to only downloaded models (see LMStudioClient.fetchModels).
+    /// exo's /v1/models lists its whole downloadable catalog, so model fetching
+    /// uses the downloaded-only filter to show only local models (see LMStudioClient.fetchModels).
     case exo
     /// Raw value kept as "openRouter" so existing SwiftData records deserialise correctly.
     case cloudAPI = "openRouter"
