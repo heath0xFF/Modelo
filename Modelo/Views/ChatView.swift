@@ -114,14 +114,23 @@ struct ChatView: View {
         boundServer?.contextLength(for: pickedModel?.model.id ?? "") ?? pickedModel?.model.maxContextLength ?? 0
     }
 
+    /// Display name of the per-chat workspace folder, or nil when none is set.
+    /// Computed once and shared by the system-suffix builder and the workspace chip.
+    private var workspaceFolderName: String? {
+        guard let path = conversation.projectPath, !path.isEmpty else { return nil }
+        return URL(fileURLWithPath: path).lastPathComponent
+    }
+
+
     /// System suffix injected into every request: artifact rendering instructions
     /// and, when a local workspace is active, a note so the model knows it can
     /// read/write files on this Mac using the file tools.
     private var combinedSystemSuffix: String? {
         var parts: [String] = []
         if artifactsEnabled { parts.append(ArtifactInstructions.system) }
-        if let path = conversation.projectPath, !path.isEmpty {
-            let name = URL(fileURLWithPath: path).lastPathComponent
+        if let path = conversation.projectPath, !path.isEmpty,
+           FileManager.default.fileExists(atPath: path),
+           let name = workspaceFolderName {
             parts.append("""
             You have read/write access to the user's local filesystem on this Mac. \
             Workspace root: \(path) (folder: "\(name)"). \
@@ -247,7 +256,6 @@ struct ChatView: View {
                     agentButton
                 }
                 benchmarkButton
-                FontSizeControl(size: $messageFontSize)
                 Spacer(minLength: 8)
                 if let server = pickedModel?.server {
                     statusPill(for: server)
@@ -498,7 +506,7 @@ struct ChatView: View {
     /// remote server read/write files on this Mac.
     @ViewBuilder private var workspaceButton: some View {
         if let path = conversation.projectPath, !path.isEmpty {
-            let name = URL(fileURLWithPath: path).lastPathComponent
+            let name = workspaceFolderName ?? path
             HStack(spacing: 0) {
                 Button(action: pickWorkspace) {
                     HStack(spacing: 5) {
@@ -522,13 +530,15 @@ struct ChatView: View {
                 Button(action: clearWorkspace) {
                     Image(systemName: "xmark")
                         .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(Theme.textDim)
+                        .foregroundStyle(isStreaming ? Theme.textFaint : Theme.textDim)
                         .padding(.trailing, 9)
                         .padding(.leading, 3)
                         .padding(.vertical, 5)
                 }
                 .buttonStyle(.plain)
-                .help("Clear workspace — model loses local file access")
+                .disabled(isStreaming)
+                .help(isStreaming ? "Stop the current reply before changing workspace"
+                                  : "Clear workspace — model loses local file access")
             }
             .background(Theme.amberFillLo, in: RoundedRectangle(cornerRadius: Theme.Radius.control))
             .overlay(RoundedRectangle(cornerRadius: Theme.Radius.control).stroke(Theme.amberBorder))
@@ -994,11 +1004,11 @@ struct ChatView: View {
 
     // MARK: Session plumbing (unchanged behavior)
 
-    private func ensureSession() {
-        composerFocused = true
+    private func ensureSession(grabFocus: Bool = true) {
         // Reuse a session already streaming for this conversation (the user came back
         // to a chat whose turn kept running while they were away).
         guard session == nil else { return }
+        if grabFocus { composerFocused = true }
         let keychain = KeychainStore()
         var tools: [any Tool] = []
         if let key = keychain.get(account: FirecrawlClient.keychainAccount), !key.isEmpty {
@@ -1010,7 +1020,10 @@ struct ChatView: View {
         // First-party filesystem/shell tools. A project-scoped conversation (started from
         // the Projects sidebar) confines them to that project directory; otherwise they're
         // opt-in and confined to the user's chosen global workspace.
-        if let path = conversation.projectPath, !path.isEmpty {
+        // Guard on fileExists so a stale/moved path doesn't leave the model told it has
+        // access while the tool registry is actually empty.
+        if let path = conversation.projectPath, !path.isEmpty,
+           FileManager.default.fileExists(atPath: path) {
             tools += FSToolSettings.tools(enabled: true, shell: shellToolEnabled, root: path)
         } else {
             tools += FSToolSettings.tools(enabled: fsToolsEnabled, shell: shellToolEnabled, root: fsToolsRoot)
@@ -1051,14 +1064,14 @@ struct ChatView: View {
         panel.message = "Choose the folder the model can read and write on this Mac."
         guard panel.runModal() == .OK, let url = panel.url else { return }
         conversation.projectPath = url.path
-        try? context.save()
+        do { try context.save() } catch { print("[ChatView] workspace save failed: \(error)") }
         rebuildSession()
     }
 
     /// Clears the workspace so the model loses local file access for this chat.
     private func clearWorkspace() {
         conversation.projectPath = nil
-        try? context.save()
+        do { try context.save() } catch { print("[ChatView] workspace clear failed: \(error)") }
         rebuildSession()
     }
 
@@ -1066,7 +1079,8 @@ struct ChatView: View {
     /// other registry change) takes effect immediately without reopening the chat.
     private func rebuildSession() {
         sessionStore.discard(convoID)
-        ensureSession()
+        // Don't steal focus — the user may be in a popover or other control.
+        ensureSession(grabFocus: false)
     }
 
     /// Drops a past user turn back into the composer (focused) so it can be edited
@@ -1346,38 +1360,5 @@ private struct ToolApprovalCard: View {
         .padding(11)
         .background(Theme.amberFillLo, in: RoundedRectangle(cornerRadius: Theme.Radius.card))
         .overlay(RoundedRectangle(cornerRadius: Theme.Radius.card).stroke(Theme.amberBorder))
-    }
-}
-
-/// A−/A+ stepper for the chat text size. Clamped to a sane range; the same value
-/// is also driven by the ⌘+ / ⌘- / ⌘0 menu commands.
-struct FontSizeControl: View {
-    @Binding var size: Double
-
-    static let range: ClosedRange<Double> = 12...26
-
-    var body: some View {
-        HStack(spacing: 0) {
-            button("textformat.size.smaller") {
-                size = max(Self.range.lowerBound, size - 1)
-            }
-            Rectangle().fill(Theme.Palette.stroke).frame(width: 1, height: 16)
-            button("textformat.size.larger") {
-                size = min(Self.range.upperBound, size + 1)
-            }
-        }
-        .panel(Theme.Palette.panel, radius: 7)
-        .help("Chat text size (⌘+ / ⌘−)")
-    }
-
-    private func button(_ symbol: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 12))
-                .foregroundStyle(Theme.Palette.inkDim)
-                .frame(width: 30, height: 26)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
     }
 }

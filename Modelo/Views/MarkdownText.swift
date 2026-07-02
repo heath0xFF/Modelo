@@ -40,7 +40,10 @@ extension MarkdownUI.Theme {
                 BackgroundColor(Theme.fillHi)
             }
             .strong { FontWeight(.semibold) }
-            .link { ForegroundColor(Theme.amber) }
+            .link {
+                ForegroundColor(Theme.amber)
+                UnderlineStyle(.single)
+            }
             .codeBlock { configuration in
                 ModeloCodeBlock(configuration: configuration, fontSize: fontSize)
             }

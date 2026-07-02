@@ -9,12 +9,26 @@ import Security
 /// (`kSecUseDataProtectionKeychain = true`), which does not tie access to the
 /// app's code signature. This avoids macOS password prompts on every debug build.
 /// Reads fall back to the legacy keychain and migrate items automatically.
+///
+/// An in-memory cache (keyed by service+account) eliminates repeated OS-level
+/// keychain prompts within a single process lifetime. The cache is invalidated
+/// on every write or delete so Settings changes propagate immediately.
 struct KeychainStore {
     let service: String
 
     /// Pre-rename service name (`ModeloDos`). Items found here are migrated to the
     /// current service on first read so existing API keys survive the rename.
     private static let legacyService = "com.peregrine.modelodos"
+
+    // MARK: - Process-lifetime read cache
+
+    private static var readCache: [String: String] = [:]
+    private static let cacheLock = NSLock()
+
+    private static func cacheKey(account: String, service: String) -> String {
+        // Null-separated so "svc/acc" can't collide with "sv" + "c/acc".
+        "\(service)\0\(account)"
+    }
 
     init(service: String = "com.peregrine.modelo") {
         self.service = service
@@ -36,34 +50,61 @@ struct KeychainStore {
     // MARK: - Off-main-thread implementation
 
     private func _get(account: String) -> String? {
-        if let value = readItem(account: account, service: service, dataProtection: true) { return value }
-        // Fallbacks, in priority order — migrate on first success:
-        //   1. current service, legacy keychain
-        //   2. legacy service (ModeloDos), data-protection keychain
-        //   3. legacy service (ModeloDos), legacy keychain
-        let fallbacks: [(String, Bool)] = [
-            (service, false),
-            (Self.legacyService, true),
-            (Self.legacyService, false)
-        ]
-        for (svc, dataProtection) in fallbacks {
-            if let value = readItem(account: account, service: svc, dataProtection: dataProtection) {
-                _set(value, account: account)
-                // Only remove the migrated source once the value is confirmed in the current
-                // service's data-protection keychain. If that write failed (e.g. the
-                // data-protection keychain is unavailable, as in an unsigned test process),
-                // deleting the source would destroy the only copy. A leftover that survives
-                // here is still cleared by delete(), which removes every location.
-                if readItem(account: account, service: service, dataProtection: true) == value {
-                    SecItemDelete(baseQuery(account: account, service: svc, dataProtection: dataProtection) as CFDictionary)
+        // Fast path: return from in-memory cache to avoid repeated OS prompts.
+        let key = Self.cacheKey(account: account, service: service)
+        Self.cacheLock.lock()
+        if let hit = Self.readCache[key] { Self.cacheLock.unlock(); return hit }
+        Self.cacheLock.unlock()
+
+        // Slow path: hit the keychain.
+        let result: String?
+        if let value = readItem(account: account, service: service, dataProtection: true) {
+            result = value
+        } else {
+            // Fallbacks, in priority order — migrate on first success:
+            //   1. current service, legacy keychain
+            //   2. legacy service (ModeloDos), data-protection keychain
+            //   3. legacy service (ModeloDos), legacy keychain
+            let fallbacks: [(String, Bool)] = [
+                (service, false),
+                (Self.legacyService, true),
+                (Self.legacyService, false)
+            ]
+            var found: String? = nil
+            for (svc, dataProtection) in fallbacks {
+                if let value = readItem(account: account, service: svc, dataProtection: dataProtection) {
+                    _set(value, account: account)
+                    // Only remove the migrated source once the value is confirmed in the current
+                    // service's data-protection keychain. If that write failed (e.g. the
+                    // data-protection keychain is unavailable, as in an unsigned test process),
+                    // deleting the source would destroy the only copy. A leftover that survives
+                    // here is still cleared by delete(), which removes every location.
+                    if readItem(account: account, service: service, dataProtection: true) == value {
+                        SecItemDelete(baseQuery(account: account, service: svc, dataProtection: dataProtection) as CFDictionary)
+                    }
+                    found = value
+                    break
                 }
-                return value
             }
+            result = found
         }
-        return nil
+
+        // Populate cache for next time (nil not cached — user may add a key later).
+        if let result {
+            Self.cacheLock.lock()
+            Self.readCache[key] = result
+            Self.cacheLock.unlock()
+        }
+        return result
     }
 
     private func _set(_ value: String?, account: String) {
+        // Invalidate cache so the next read reflects the new value.
+        let key = Self.cacheKey(account: account, service: service)
+        Self.cacheLock.lock()
+        Self.readCache.removeValue(forKey: key)
+        Self.cacheLock.unlock()
+
         guard let value, let data = value.data(using: .utf8) else {
             _delete(account: account)
             return
@@ -89,6 +130,12 @@ struct KeychainStore {
     }
 
     private func _delete(account: String) {
+        // Evict from cache for both current and legacy service names.
+        Self.cacheLock.lock()
+        Self.readCache.removeValue(forKey: Self.cacheKey(account: account, service: service))
+        Self.readCache.removeValue(forKey: Self.cacheKey(account: account, service: Self.legacyService))
+        Self.cacheLock.unlock()
+
         // Clear the secret from every place get() might find it — current and legacy
         // service, data-protection and legacy keychain — so a cleared key stays cleared.
         SecItemDelete(baseQuery(account: account, service: service, dataProtection: true) as CFDictionary)
